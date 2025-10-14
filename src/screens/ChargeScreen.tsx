@@ -33,6 +33,7 @@ export default function ChargeScreen() {
   const toastSeq = useRef(1);
   const [preparedTxId, setPreparedTxId] = useState<string | null>(null);
   const [isStopping, setIsStopping] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     const fromParams = route?.params?.chargeBoxId || null;
@@ -168,6 +169,7 @@ export default function ChargeScreen() {
   const handleStart = async () => {
     if (!chargeBoxId) return;
     try {
+      setIsStarting(true);
       Telemetry.track('charge.remote_start.request', { chargeBoxId, connectorId: startConnectorId || null });
       if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const effIdTag = (startIdTag?.trim() || me?.defaultIdTag?.trim() || (process.env.EXPO_PUBLIC_DEFAULT_IDTAG || '').trim() || 'DEMO-USER');
@@ -185,6 +187,8 @@ export default function ChargeScreen() {
       Telemetry.track('charge.remote_start.fail', { chargeBoxId, error: e?.message });
       pushToast('error', e?.message || 'Não foi possível iniciar.');
       if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -297,27 +301,16 @@ export default function ChargeScreen() {
             <Text style={styles.etaText}>ETA:   kWh alvo: </Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            stopEnabled ? styles.stopBtn : styles.startBtn,
-            ((stopEnabled ? false : startDisabled) || isStopping) && styles.disabled,
-          ]}
-          onPress={() => {
-            if (stopEnabled) return handleStop();
-            setStartConnectorId(availableConnectors[0]?.connectorId ? String(availableConnectors[0].connectorId) : '');
-            setStartVisible(true);
-          }}
-          disabled={isStopping ? true : (stopEnabled ? false : startDisabled)}
-          accessibilityLabel={stopEnabled ? (isStopping ? 'Parando carregamento' : 'Parar carregamento') : 'Iniciar carregamento'}
-        >
-          <Text style={styles.primaryButtonText}>{stopEnabled ? (isStopping ? 'Parando...' : 'Stop Charging') : 'Start Charging'}</Text>
-        </TouchableOpacity>
-        <Text style={styles.priceSubtext}>{priceSubtext}</Text>
+        {/* Removido bloco superior de ação; apenas mantém o cartão com o ring */}
       </View>
 
       {!!chargeBoxId && (
-        <ChargingControls chargeBoxId={chargeBoxId} defaultIdTag={startIdTag} defaultConnectorId={availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId} />
+        <ChargingControls
+          chargeBoxId={chargeBoxId}
+          defaultIdTag={startIdTag}
+          defaultConnectorId={availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId}
+          onToast={pushToast}
+        />
       )}
 
       <View style={styles.grid}>
@@ -376,8 +369,8 @@ export default function ChargeScreen() {
               <TouchableOpacity style={[styles.sheetBtn, styles.sheetCancel]} onPress={() => setStartVisible(false)}>
                 <Text style={styles.sheetBtnText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.sheetBtn, styles.sheetConfirm]} onPress={handleStart}>
-                <Text style={[styles.sheetBtnText, { color: '#fff' }]}>Iniciar</Text>
+              <TouchableOpacity style={[styles.sheetBtn, styles.sheetConfirm, isStarting && styles.disabled]} onPress={handleStart} disabled={isStarting}>
+                <Text style={[styles.sheetBtnText, { color: '#fff' }]}>{isStarting ? 'Iniciando…' : 'Iniciar'}</Text>
               </TouchableOpacity>
             </View>
           </View>

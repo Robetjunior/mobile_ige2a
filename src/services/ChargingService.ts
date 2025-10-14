@@ -25,13 +25,12 @@ const ChargingService = {
     return ws || recentHb;
   },
 
-  // Sessão ativa pelo banco: retorna transaction_id
+  // Sessão ativa: tenta banco e aplica fallbacks (last-tx, lista de sessões)
   async getActiveSessionTx(chargeBoxId: string): Promise<number | null> {
-    const s = await ChargerService.getActiveSessionByChargeBoxId(chargeBoxId).catch(() => null);
-    const anyTx = s?.transaction_id ?? s?.transactionId ?? s?.id ?? null;
-    if (typeof anyTx === 'number') return anyTx;
-    if (anyTx != null) return Number(anyTx);
-    return null;
+    // Preferir método agregador com múltiplos fallbacks
+    const tx = await ChargerService.discoverActiveTransactionId(chargeBoxId).catch(() => null);
+    if (tx == null) return null;
+    return Number(tx);
   },
 
   // Fallback debug: último tx conhecido

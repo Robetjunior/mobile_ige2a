@@ -38,7 +38,7 @@ import ChargerService from '../services/chargerService';
 import { Telemetry } from '../lib/telemetry';
 import OnlineChargerCard from '../components/OnlineChargerCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Modal, TextInput } from 'react-native';
+import { Modal, TextInput, Switch } from 'react-native';
 
 type RootStackParamList = {
   StationDetail: { stationId: string };
@@ -48,7 +48,7 @@ type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAP_HEIGHT = SCREEN_HEIGHT * 0.6;
-const LIST_HEIGHT = SCREEN_HEIGHT * 0.4;
+const LIST_HEIGHT = SCREEN_HEIGHT * 0.45;
 
 export const HomeScreen = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -91,6 +91,7 @@ export const HomeScreen = () => {
   const [startConnectorId, setStartConnectorId] = useState('');
   const [startIdTag, setStartIdTag] = useState('');
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
+  const [startForce, setStartForce] = useState(false);
   
 
   useEffect(() => {
@@ -162,14 +163,22 @@ export const HomeScreen = () => {
     }
   };
 
-  // Nova lista: status online (WS + HB + status/conn)
+  // Nova lista: usa exclusivamente /v1/ocpp/online (sem sinceMinutes)
   const loadOnlineStatusList = async () => {
     setLoading(true);
     setError(null);
     try {
-      const { items, count } = await ChargerService.getOnlineStatusList(15, 50);
+      // Usa exclusivamente /v1/ocpp/online sem parâmetros para obter IDs WS online
+      const ids = await ChargerService.getOcppOnlineIds();
+      const items = ids.map((id) => ({
+        chargeBoxId: id,
+        wsOnline: true,
+        onlineRecently: false,
+        connectors: [],
+        name: id,
+      } as OnlineChargerItem));
       setOnlineItems(items);
-      setOnlineTotal(count);
+      setOnlineTotal(items.length);
       setPage(1);
     } catch (error) {
       console.error('Error loading online status list:', error);
@@ -196,30 +205,44 @@ export const HomeScreen = () => {
 
   const openStartSheet = (item: OnlineChargerItem) => {
     setStartChargeBoxId(item.chargeBoxId);
-    const first = item.connectors?.[0]?.connectorId;
-    setStartConnectorId(first ? String(first) : '');
+    const firstAvail = (item.connectors || []).find((c) => {
+      const s = (c.status || '').toLowerCase();
+      return s === 'available' || s === 'preparing';
+    })?.connectorId;
+    setStartConnectorId(firstAvail ? String(firstAvail) : '');
     setStartIdTag('');
+    setStartForce(false);
     setStartVisible(true);
   };
 
   const submitStart = async () => {
-    if (!startChargeBoxId || !startConnectorId || !startIdTag) {
-      Alert.alert('Dados incompletos', 'Informe connectorId e idTag.');
+    if (!startChargeBoxId || !startIdTag) {
+      Alert.alert('Dados incompletos', 'Informe idTag. O connectorId é opcional.');
       return;
     }
     try {
       setIsSubmittingStart(true);
-      await ChargerService.startBilling({
-        chargeBoxId: startChargeBoxId,
-        connectorId: startConnectorId,
-        idTag: startIdTag,
-      });
-      setStartVisible(false);
-      setStartIdTag('');
-      setStartConnectorId('');
-      // Após iniciar, navegar para /charge (aba Charge)
-      // @ts-ignore
-      navigation.navigate('Charge');
+      const resp = await ChargerService.remoteStart(
+        {
+          chargeBoxId: startChargeBoxId,
+          connectorId: startConnectorId || undefined,
+          idTag: startIdTag.trim(),
+        },
+        { force: !!startForce }
+      );
+      const isDup = !!(resp && resp.idempotentDuplicate);
+      if (isDup && !startForce) {
+        Alert.alert('Comando já aberto', 'Já existe um comando igual aberto. Ative "Forçar reenvio" para enviar novamente.');
+      } else {
+        Alert.alert('Sucesso', startForce ? 'Comando enviado com force=1.' : 'Comando enviado.');
+        setStartVisible(false);
+        setStartIdTag('');
+        setStartConnectorId('');
+        setStartForce(false);
+        // Após iniciar, navegar para /charge (aba Charge)
+        // @ts-ignore
+        navigation.navigate('Charge', { chargeBoxId: startChargeBoxId });
+      }
     } catch (e: any) {
       Alert.alert('Falha ao iniciar', String(e?.message || e));
     } finally {
@@ -229,15 +252,24 @@ export const HomeScreen = () => {
 
   const stopBilling = async (item: OnlineChargerItem) => {
     try {
-      if (!item.lastTransactionId) {
-        Alert.alert('Sem sessão ativa', 'Não há transação para encerrar.');
+      let tx = item.lastTransactionId ?? null;
+      if (tx == null) {
+        tx = await ChargerService.getLastTransactionId(item.chargeBoxId);
+      }
+      if (tx == null) {
+        // Fallback: consulta lista de sessões
+        tx = await ChargerService.getActiveTransactionIdFromList(item.chargeBoxId);
+      }
+      if (tx == null) {
+        Alert.alert('Sem sessão ativa', 'Não foi possível identificar a transação em andamento.');
         return;
       }
-      await ChargerService.closeBilling({
-        chargeBoxId: item.chargeBoxId,
-        transactionId: String(item.lastTransactionId),
-      });
-      Alert.alert('Sessão encerrada', 'A cobrança foi encerrada.');
+      const resp = await ChargerService.remoteStop({ transactionId: tx });
+      if (resp?.status === 'pending' || resp?.pending) {
+        Alert.alert('Comando pendente', 'CP offline ou a sessão já terminou. Aguarde processamento.');
+      } else {
+        Alert.alert('Sessão encerrada', 'A cobrança foi encerrada.');
+      }
       await loadOnlineStatusList();
     } catch (e: any) {
       Alert.alert('Falha ao parar', String(e?.message || e));
@@ -379,20 +411,19 @@ export const HomeScreen = () => {
         >
           <Ionicons name="locate" size={24} color={COLORS.primary} />
         </TouchableOpacity>
-      </View>
-
-      <Animated.View style={[styles.listContainer, { height: listHeight }]}>
-        <TouchableOpacity
-          style={styles.listHeader}
-          onPress={toggleListExpansion}
-        >
-          <View style={styles.dragHandle} />
-          <Ionicons
-            name={isListExpanded ? 'chevron-down' : 'chevron-up'}
-            size={20}
-            color={COLORS.gray}
-          />
-        </TouchableOpacity>
+        {/* Bottom sheet sobre o mapa */}
+        <Animated.View style={[styles.listContainer, { height: listHeight }]}>
+          <TouchableOpacity
+            style={styles.listHeader}
+            onPress={toggleListExpansion}
+          >
+            <View style={styles.dragHandle} />
+            <Ionicons
+              name={isListExpanded ? 'chevron-down' : 'chevron-up'}
+              size={20}
+              color={COLORS.gray}
+            />
+          </TouchableOpacity>
 
         {isLoading ? (
           <View style={{ paddingHorizontal: SIZES.padding }}>
@@ -410,6 +441,24 @@ export const HomeScreen = () => {
                 onDetails={() => navigation.navigate('StationDetail', { stationId: item.chargeBoxId })}
                 onStart={() => openStartSheet(item)}
                 onStop={() => stopBilling(item)}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    try {
+                      // Navegação direta por URL com query
+                      const href = `/charge?chargeBoxId=${encodeURIComponent(item.chargeBoxId)}`;
+                      (globalThis as any)?.window?.location?.assign
+                        ? (globalThis as any).window.location.assign(href)
+                        : ((globalThis as any).window.location.href = href);
+                    } catch {
+                      // Fallback para navegação nativa caso o ambiente web não esteja disponível
+                      // @ts-ignore - navegando pela tab
+                      navigation.navigate('Charge' as never, { chargeBoxId: item.chargeBoxId } as never);
+                    }
+                  } else {
+                    // @ts-ignore - navegando pela tab
+                    navigation.navigate('Charge' as never, { chargeBoxId: item.chargeBoxId } as never);
+                  }
+                }}
               />
             )}
             ListEmptyComponent={
@@ -420,10 +469,11 @@ export const HomeScreen = () => {
             onEndReached={() => {
               if (visibleOnline.length < sortedOnline.length) setPage((p) => p + 1);
             }}
-            contentContainerStyle={styles.listContent}
-          />
-        )}
-      </Animated.View>
+              contentContainerStyle={styles.listContent}
+            />
+          )}
+        </Animated.View>
+      </View>
       {/* FilterModal removido */}
 
       {/* Bottom sheet iniciar sessão */}
@@ -463,6 +513,10 @@ export const HomeScreen = () => {
                 <Text style={{ color: '#fff', fontWeight: '700' }}>{isSubmittingStart ? 'Enviando...' : 'Iniciar'}</Text>
               </TouchableOpacity>
             </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <Switch value={startForce} onValueChange={setStartForce} />
+              <Text style={{ marginLeft: 8 }}>Forçar reenvio (force=1)</Text>
+            </View>
           </View>
         </View>
       </Modal>
@@ -476,7 +530,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
   mapContainer: {
-    height: MAP_HEIGHT,
+    flex: 1,
     position: 'relative',
   },
   map: {
@@ -528,9 +582,18 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   listContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: COLORS.lightGray,
     borderTopLeftRadius: SIZES.radius * 2,
     borderTopRightRadius: SIZES.radius * 2,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 8,
   },
   listHeader: {
     alignItems: 'center',

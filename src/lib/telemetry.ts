@@ -6,7 +6,8 @@ type TelemetryEvent =
   | 'home.open_station'
   | 'charge.remote_start.request'
   | 'charge.remote_start.success'
-  | 'charge.remote_start.fail';
+  | 'charge.remote_start.fail'
+  | 'auth.logout';
 
 export interface TelemetryPayload {
   [k: string]: any;

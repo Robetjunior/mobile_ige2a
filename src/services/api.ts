@@ -1,7 +1,7 @@
 import { Station, ChargingSession, SessionHistory, ApiResponse } from '../types';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000';
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY || 'minha_chave_super_secreta';
 
 class ApiService {
   private async request<T>(

@@ -86,6 +86,7 @@ export const STORAGE_KEYS = {
   USER_PREFERENCES: '@ev_charging_preferences',
   THEME: '@ev_charging_theme',
   LANGUAGE: '@ev_charging_language',
+  CARDS: '@ev_charging_cards',
 } as const;
 
 export const SUPPORTED_LANGUAGES = {

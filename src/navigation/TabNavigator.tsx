@@ -9,12 +9,12 @@ import HomeScreen from '../screens/HomeScreen';
 import ChargeScreen from '../screens/ChargeScreen';
 import QRScannerScreen from '../screens/QRScannerScreen';
 import RecordScreen from '../screens/RecordScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import ProfileMeScreen from '../screens/ProfileMeScreen';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 export type TabParamList = {
   Home: undefined;
-  Charge: undefined;
+  Charge: { chargeBoxId?: string } | undefined;
   QRScanner: undefined;
   Record: undefined;
   Me: undefined;
@@ -111,7 +111,7 @@ const TabNavigator: React.FC = () => {
       <Tab.Screen name="Charge" children={() => (<ErrorBoundary><ChargeScreen /></ErrorBoundary>)} />
       <Tab.Screen name="QRScanner" component={QRScannerScreen} />
       <Tab.Screen name="Record" children={() => (<ErrorBoundary><RecordScreen /></ErrorBoundary>)} />
-      <Tab.Screen name="Me" children={() => (<ErrorBoundary><ProfileScreen /></ErrorBoundary>)} />
+      <Tab.Screen name="Me" children={() => (<ErrorBoundary><ProfileMeScreen /></ErrorBoundary>)} />
     </Tab.Navigator>
   );
 };

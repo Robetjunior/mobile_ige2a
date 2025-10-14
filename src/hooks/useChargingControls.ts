@@ -11,11 +11,15 @@ type UseChargingControlsArgs = {
   sseTimeoutMs?: number;
 };
 
+type Phase = 'IDLE' | 'STARTING' | 'CHARGING' | 'STOPPING';
+
 export function useChargingControls({ chargeBoxId, defaultIdTag, defaultConnectorId, enableOnlineCheck = false, sseTimeoutMs = 30000 }: UseChargingControlsArgs) {
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [activeTx, setActiveTx] = useState<number | null>(null);
+  const [phase, setPhase] = useState<Phase>('IDLE');
+  const lastActionAtRef = useRef<number>(0);
   const unsubSseRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -27,9 +31,13 @@ export function useChargingControls({ chargeBoxId, defaultIdTag, defaultConnecto
     };
   }, []);
 
-  async function onStart(idTag?: string, connectorId?: number | string) {
-    if (isStarting) return;
+  async function onStart(idTag?: string, connectorId?: number | string): Promise<'sent'|'idempotentDuplicate'|'pending'|'error'> {
+    const now = Date.now();
+    if (now - (lastActionAtRef.current || 0) < 800) return 'error';
+    lastActionAtRef.current = now;
+    if (isStarting) return 'error';
     setIsStarting(true);
+    setPhase('STARTING');
     setStatusMsg('');
     try {
       const envDefault = (process.env.EXPO_PUBLIC_DEFAULT_IDTAG || '').trim();
@@ -47,12 +55,31 @@ export function useChargingControls({ chargeBoxId, defaultIdTag, defaultConnecto
       const resp = await ChargingService.remoteStart(chargeBoxId, finalIdTag, finalConnector);
       if (resp.status === 'sent') {
         setStatusMsg('Comando enviado ao CP.');
+        // Se já houver sessão ativa, atualiza fase
+        try {
+          const tx = await ChargingService.getActiveSessionTx(chargeBoxId);
+          if (tx != null) {
+            setActiveTx(tx);
+            setPhase('CHARGING');
+          }
+        } catch {}
+        return 'sent';
       } else if (resp.status === 'idempotentDuplicate') {
         setStatusMsg('Comando duplicado já aberto. Evitando reenvio.');
+        // Tratar como sessão já em andamento
+        try {
+          const tx = await ChargingService.getActiveSessionTx(chargeBoxId);
+          if (tx != null) setActiveTx(tx);
+        } catch {}
+        setPhase('CHARGING');
+        return 'idempotentDuplicate';
       } else if (resp.status === 'pending') {
         setStatusMsg('Comando pendente (CP offline ou sem conexão).');
+        // permanece STARTING até repoll
+        return 'pending';
       } else {
         setStatusMsg('Comando processado.');
+        return 'sent';
       }
 
       // Opcional: ouvir session-start. Mantemos como exemplo simples
@@ -68,14 +95,20 @@ export function useChargingControls({ chargeBoxId, defaultIdTag, defaultConnecto
       } catch {}
     } catch (err: any) {
       setStatusMsg(err?.message || 'Falha ao iniciar.');
+      setPhase('IDLE');
+      return 'error';
     } finally {
       setIsStarting(false);
     }
   }
 
-  async function onStop() {
-    if (isStopping) return;
+  async function onStop(): Promise<'confirmed'|'sent'|'pending'|'error'> {
+    const now = Date.now();
+    if (now - (lastActionAtRef.current || 0) < 800) return 'error';
+    lastActionAtRef.current = now;
+    if (isStopping) return 'error';
     setIsStopping(true);
+    setPhase('STOPPING');
     setStatusMsg('');
     try {
       // Descobrir transactionId: prefer sessions/active, fallback debug last-tx
@@ -110,17 +143,43 @@ export function useChargingControls({ chargeBoxId, defaultIdTag, defaultConnecto
       if (confirmed) {
         setStatusMsg('Sessão encerrada.');
         setActiveTx(null);
+        setPhase('IDLE');
+        return 'confirmed';
       } else {
         setStatusMsg('Aguardando confirmação de encerramento (timeout).');
+        setPhase('CHARGING');
+        return 'sent';
       }
     } catch (err: any) {
       setStatusMsg(err?.message || 'Falha ao parar.');
+      setPhase('CHARGING');
+      return 'error';
     } finally {
       setIsStopping(false);
     }
   }
 
-  return { isStarting, isStopping, statusMsg, activeTx, onStart, onStop };
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const tx = await ChargingService.getActiveSessionTx(chargeBoxId).catch(() => null);
+        if (!mounted) return;
+        if (tx != null) {
+          setActiveTx(tx);
+          setPhase('CHARGING');
+        } else {
+          setActiveTx(null);
+          setPhase('IDLE');
+        }
+      } catch {}
+    };
+    const iv = setInterval(check, 5000);
+    check();
+    return () => { mounted = false; clearInterval(iv); };
+  }, [chargeBoxId]);
+
+  return { isStarting, isStopping, statusMsg, activeTx, phase, onStart, onStop };
 }
 
 export default useChargingControls;

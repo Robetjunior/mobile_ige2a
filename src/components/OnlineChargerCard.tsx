@@ -11,6 +11,7 @@ interface OnlineChargerCardProps {
   onDetails: () => void;
   onStart: () => void;
   onStop: () => void;
+  onPress?: () => void;
 }
 
 export const OnlineChargerCard: React.FC<OnlineChargerCardProps> = ({
@@ -20,6 +21,7 @@ export const OnlineChargerCard: React.FC<OnlineChargerCardProps> = ({
   onDetails,
   onStart,
   onStop,
+  onPress,
 }) => {
   const title = item.name || item.chargeBoxId;
   const hbTime = item.lastHeartbeatAt ? formatTime(item.lastHeartbeatAt) : '--';
@@ -28,8 +30,30 @@ export const OnlineChargerCard: React.FC<OnlineChargerCardProps> = ({
   const visible = connectors.slice(0, 3);
   const remaining = Math.max(0, connectors.length - visible.length);
 
+  const canStart = (() => {
+    // Se está online via WS, permitir tentativa de início mesmo sem status detalhado
+    if (item.wsOnline) return true;
+    const st = (item.lastStatus || '').toLowerCase();
+    if (st === 'available' || st === 'preparing') return true;
+    return connectors.some((c) => {
+      const cs = (c.status || '').toLowerCase();
+      return cs === 'available' || cs === 'preparing';
+    });
+  })();
+
+  const canStop = (() => {
+    // Se está online via WS, permitir tentativa de parada com fallback de transactionId
+    if (item.wsOnline) return true;
+    if (item.lastTransactionId != null) return true;
+    const st = (item.lastStatus || '').toLowerCase();
+    if (st === 'charging') return true;
+    return connectors.some((c) => (c.status || '').toLowerCase() === 'charging');
+  })();
+
+  const Container: any = onPress ? TouchableOpacity : View;
+
   return (
-    <View style={styles.container}>
+    <Container style={styles.container} onPress={onPress} activeOpacity={0.85}>
       {/* Linha 1: Título + badges + favorito */}
       <View style={styles.header}>
         <View style={styles.titleWrap}>
@@ -80,26 +104,8 @@ export const OnlineChargerCard: React.FC<OnlineChargerCardProps> = ({
         <Text style={styles.metaText}>Status às {statusTime}</Text>
       </View>
 
-      {/* Linha 4: Ações */}
-      <View style={styles.actions}>
-        <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={onDetails} accessibilityLabel={`Ver detalhes de ${title}`}>
-          <Text style={styles.btnGhostText}>Detalhes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onStart} accessibilityLabel={`Iniciar sessão em ${title}`}>
-          <Ionicons name="play" size={16} color="#fff" />
-          <Text style={styles.btnPrimaryText}>Iniciar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.btn, styles.btnSecondary, !item.lastTransactionId && styles.btnDisabled]}
-          onPress={onStop}
-          disabled={!item.lastTransactionId}
-          accessibilityLabel={item.lastTransactionId ? `Parar sessão em ${title}` : 'Parar indisponível'}
-        >
-          <Ionicons name="stop" size={16} color="#fff" />
-          <Text style={styles.btnSecondaryText}>Parar</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* Ações removidas na listagem da Home */}
+    </Container>
   );
 };
 

@@ -46,6 +46,24 @@ export interface User {
   token?: string;
 }
 
+// Me/Profile types for /v1/me endpoints
+export interface Me {
+  userId: string;          // ex: Go250922150835958
+  name: string;            // ex: Jose Roberto
+  phone?: string;
+  email?: string;
+  language?: 'pt-BR'|'en-US'|'es-ES';
+  avatarUrl?: string|null;
+  favoritesCount?: number; // p/ Recently Used
+  defaultIdTag?: string;   // sugerir como idTag
+}
+
+export interface ProfileState {
+  me?: Me | null;
+  loading: boolean;
+  error?: string;
+}
+
 export interface LocationState {
   latitude: number;
   longitude: number;

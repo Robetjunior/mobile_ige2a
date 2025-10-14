@@ -2,7 +2,7 @@ import { SessionsResponse, SessionSummary, PeriodMode } from '../types';
 import { LOGGER } from '../lib/logger';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.example.com';
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY || 'your-api-key';
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY || 'minha_chave_super_secreta';
 
 const headers = {
   'X-API-Key': API_KEY,
