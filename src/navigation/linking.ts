@@ -11,7 +11,7 @@ export const linking = {
       Main: {
         screens: {
           Home: 'home',
-          Charge: 'charge',
+          Charge: 'charge/:chargeBoxId?',
           Record: 'record',
           Me: 'profile',
           QRScanner: 'qr-scanner',

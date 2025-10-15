@@ -28,7 +28,6 @@ export default function ChargeScreen() {
   const [startConnectorId, setStartConnectorId] = useState('');
   const [startIdTag, setStartIdTag] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
-  const [faqVisible, setFaqVisible] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; type: 'info'|'warn'|'error'|'success'; message: string }[]>([]);
   const toastSeq = useRef(1);
   const [preparedTxId, setPreparedTxId] = useState<string | null>(null);
@@ -128,11 +127,11 @@ export default function ChargeScreen() {
 
   const topLabel = useMemo(() => {
     const s = (online?.lastStatus || '').toLowerCase();
-    if (isCharging) return 'Charging';
-    if (s === 'available') return 'Available';
-    if (s === 'faulted') return 'Faulted';
+    if (isCharging) return 'Carregando';
+    if (s === 'available') return 'Disponível';
+    if (s === 'faulted') return 'Com falha';
     if (s) return online!.lastStatus!;
-    return 'No order in progress';
+    return '';
   }, [online?.lastStatus, isCharging]);
 
   const startDisabled = useMemo(() => {
@@ -273,24 +272,15 @@ export default function ChargeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.statusHeader}>
         <View style={styles.statusBar}>
-          <Text style={styles.statusLabel}>{topLabel}</Text>
-          <TouchableOpacity accessibilityLabel="Ajuda" onPress={() => setFaqVisible(true)} style={styles.helpIcon}>
-            <Ionicons name="help-circle-outline" size={20} color="#fff" />
-          </TouchableOpacity>
+          {topLabel ? (<Text style={styles.statusLabel}>{topLabel}</Text>) : null}
         </View>
-        <View style={styles.badgesRow}>
-          <View style={[styles.badge, { backgroundColor: online?.wsOnline ? '#DCFCE7' : '#FEE2E2' }]}>
-            <Text style={[styles.badgeText, { color: online?.wsOnline ? '#065F46' : '#9F1239' }]}>WS {online?.wsOnline ? 'online' : 'offline'}</Text>
-          </View>
-          <View style={[styles.badge, { backgroundColor: hbRecent ? '#E0E7FF' : '#FDE68A' }]}>
-            <Text style={[styles.badgeText, { color: hbRecent ? '#1E40AF' : '#92400E' }]}>{hbRecent ? 'HB recente' : 'HB antigo'}</Text>
-          </View>
-          {!!online?.lastStatus && (
+        {!!online?.lastStatus && (
+          <View style={styles.badgesRow}>
             <View style={[styles.pill, { backgroundColor: getStatusBg(online.lastStatus) }]}>
               <Text style={[styles.pillText, { color: getStatusFg(online.lastStatus) }]}>{online.lastStatus}</Text>
             </View>
-          )}
-        </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.ringCard}>
@@ -315,15 +305,15 @@ export default function ChargeScreen() {
 
       <View style={styles.grid}>
         {[
-          { label: 'Power', value: fmt(currentSession?.powerKw ?? 0, 'kW') },
-          { label: 'Voltage', value: fmt(currentSession?.voltageV ?? 0, 'V') },
-          { label: 'Current', value: fmt(currentSession?.currentA ?? 0, 'A') },
-          { label: 'Duration', value: `${Math.max(0, Math.floor((currentSession?.duration ?? 0)))} min` },
-          { label: 'Start Time', value: currentSession?.startTime ? new Date(currentSession.startTime).toLocaleTimeString() : '' },
-          { label: 'Total Amount', value: (() => { const v = currentSession?.totalAmount ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })() },
-          { label: 'Unit Price', value: (() => { const v = currentSession?.unitPrice ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })() },
-          { label: 'Energy', value: fmt(currentSession?.energyKWh ?? 0, 'KWh') },
-          { label: 'Temperature', value: fmt(currentSession?.temperatureC ?? 0, '°C') },
+          { label: 'Potência', value: fmt(currentSession?.powerKw ?? 0, 'kW') },
+          { label: 'Tensão', value: fmt(currentSession?.voltageV ?? 0, 'V') },
+          { label: 'Corrente', value: fmt(currentSession?.currentA ?? 0, 'A') },
+          { label: 'Duração', value: `${Math.max(0, Math.floor((currentSession?.duration ?? 0)))} min` },
+          { label: 'Início', value: currentSession?.startTime ? new Date(currentSession.startTime).toLocaleTimeString() : '' },
+          { label: 'Valor Total', value: (() => { const v = currentSession?.totalAmount ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })() },
+          { label: 'Preço Unitário', value: (() => { const v = currentSession?.unitPrice ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })() },
+          { label: 'Energia', value: fmt(currentSession?.energyKWh ?? 0, 'KWh') },
+          { label: 'Temperatura', value: fmt(currentSession?.temperatureC ?? 0, '°C') },
         ].map((m, idx) => (
           <View key={idx} style={styles.metricCard}>
             <Text style={styles.metricValue}>{m.value}</Text>
@@ -340,7 +330,7 @@ export default function ChargeScreen() {
         {panelOpen && (
           <View style={styles.panelBody}>
             <Text style={styles.panelRow}>Estação: {details?.name || chargeBoxId || ''}</Text>
-            <Text style={styles.panelRow}>Connector: #{availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId || ''}  Status: {online?.lastStatus || ''}</Text>
+            <Text style={styles.panelRow}>Conector: #{availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId || ''}  Status: {online?.lastStatus || ''}</Text>
           </View>
         )}
       </View>
@@ -377,22 +367,7 @@ export default function ChargeScreen() {
         </View>
       </Modal>
 
-      <Modal visible={faqVisible} transparent animationType="fade" onRequestClose={() => setFaqVisible(false)}>
-        <View style={styles.sheetBackdrop}>
-          <View style={[styles.sheet, { maxHeight: 420 }] }>
-            <Text style={styles.sheetTitle}>Ajuda rápida</Text>
-            <Text style={styles.sheetLabel}>Dicas para iniciar</Text>
-            <Text style={styles.sheetHint}>Conecte o cabo ao veículo, selecione um conector disponível, informe seu idTag e toque em Start.</Text>
-            <Text style={styles.sheetLabel}>Se a estação estiver offline</Text>
-            <Text style={styles.sheetHint}>Quando o WS estiver offline ou o HB estiver antigo, o botão Start ficará desabilitado para evitar erros. Tente novamente mais tarde ou escolha outra estação.</Text>
-            <View style={styles.sheetActions}>
-              <TouchableOpacity style={[styles.sheetBtn, styles.sheetConfirm]} onPress={() => setFaqVisible(false)}>
-                <Text style={[styles.sheetBtnText, { color: '#fff' }]}>Fechar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Modal de ajuda rápida removido */}
 
       <View style={styles.toasterWrap} pointerEvents="none">
         {toasts.map(t => (
@@ -415,7 +390,8 @@ function getStatusBg(status?: string) {
     case 'unavailable':
       return '#FEE2E2';
     default:
-      return '#E5E7EB';
+      // Cor padrão não-cinza para estados não mapeados
+      return '#DBEAFE';
   }
 }
 
@@ -429,7 +405,8 @@ function getStatusFg(status?: string) {
     case 'unavailable':
       return '#991B1B';
     default:
-      return '#374151';
+      // Texto em azul para combinar com o fundo padrão
+      return '#1E40AF';
   }
 }
 
