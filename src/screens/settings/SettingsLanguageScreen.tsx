@@ -5,8 +5,8 @@ import { useProfileStore } from '../../stores/profileStore';
 
 const LANGS: Array<{ code: 'pt-BR'|'en-US'|'es-ES'; label: string }> = [
   { code: 'pt-BR', label: 'Português' },
-  { code: 'en-US', label: 'English' },
-  { code: 'es-ES', label: 'Español' },
+  { code: 'en-US', label: 'Inglês' },
+  { code: 'es-ES', label: 'Espanhol' },
 ];
 
 const SettingsLanguageScreen: React.FC = () => {
@@ -19,7 +19,7 @@ const SettingsLanguageScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Language</Text>
+      <Text style={styles.title}>Idioma</Text>
       <View style={styles.card}>
         {LANGS.map((l) => (
           <TouchableOpacity key={l.code} style={[styles.row, selected === l.code && styles.rowActive]} onPress={() => setSelected(l.code)}>

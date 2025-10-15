@@ -24,14 +24,16 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
   isLoading = false,
 }) => {
   const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('pt-BR', {
+    const formatted = new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     }).format(amount);
+    // Garantir espaço não separável entre símbolo e valor
+    return formatted.replace(/\s/g, '\u00A0');
   };
 
   const formatEnergy = (kWh: number): string => {
-    return `${kWh.toFixed(1)} kWh`;
+    return `${kWh.toFixed(1)}\u00A0kWh`;
   };
 
   const formatDuration = (minutes: number): string => {
@@ -40,7 +42,7 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
     }
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}min` : `${hours}h`;
+    return remainingMinutes > 0 ? `${hours}h\u00A0${remainingMinutes}min` : `${hours}h`;
   };
 
   const formatCurrencyForAccessibility = (amount: number): string => {
@@ -92,8 +94,24 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
         </View>
       </View>
       
-      <Text style={styles.cardTitle}>{card.title}</Text>
-      <Text style={[styles.cardValue, isLoading && styles.loadingValue]}>
+      <View style={styles.titleContainer}>
+        <Text 
+          style={styles.cardTitle}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+          adjustsFontSizeToFit
+          minimumFontScale={0.9}
+        >
+          {card.title}
+        </Text>
+      </View>
+      <Text 
+        style={[styles.cardValue, isLoading && styles.loadingValue]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
         {card.value}
       </Text>
     </View>
@@ -120,6 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -131,6 +150,13 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     marginBottom: 12,
+    alignItems: 'center',
+  },
+  titleContainer: {
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   iconContainer: {
     width: 48,
@@ -140,18 +166,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6C757D',
     fontWeight: '500',
-    marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
   cardValue: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
     color: '#212529',
-    lineHeight: 22,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   loadingValue: {
     color: '#ADB5BD',

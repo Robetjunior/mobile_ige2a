@@ -5,7 +5,7 @@ import { COLORS, SIZES } from '../constants';
 const FavoritesScreen: React.FC = () => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Favorites</Text>
+      <Text style={styles.title}>Favoritos</Text>
       <Text style={styles.text}>Lista de favoritos (mock)</Text>
     </View>
   );

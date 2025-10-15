@@ -9,7 +9,7 @@ const AccountCancelScreen: React.FC = () => {
     if (step === 1) {
       setStep(2);
     } else {
-      Alert.alert('Account cancellation', 'Ainda não há API. Abrindo suporte...', [
+      Alert.alert('Cancelamento de Conta', 'Ainda não há API. Abrindo suporte...', [
         { text: 'OK', onPress: () => Linking.openURL('mailto:support@example.com') },
       ]);
     }
@@ -17,7 +17,7 @@ const AccountCancelScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Account Cancellation</Text>
+      <Text style={styles.title}>Cancelamento de Conta</Text>
       <View style={styles.card}>
         {step === 1 ? (
           <>

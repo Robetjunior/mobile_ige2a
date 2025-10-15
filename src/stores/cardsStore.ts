@@ -74,6 +74,43 @@ export const useCardsStore = create<CardsStore>((set, get) => ({
   load: async () => {
     set({ loading: true });
     const items = await restore();
+    if (!items.length) {
+      try {
+        const isDev = (process.env.NODE_ENV !== 'production');
+        const allowMock = isDev || process.env.EXPO_PUBLIC_DEV_ENABLE_MOCKS === 'true';
+        if (allowMock) {
+          const now = new Date();
+          const demo = [
+            {
+              id: 'card_demo_visa',
+              brand: 'visa' as CardBrand,
+              last4: '1234',
+              holder: 'José Roberto',
+              expMonth: 12,
+              expYear: now.getFullYear() + 3,
+              isDefault: true,
+              label: 'Cartão Principal',
+            },
+            {
+              id: 'card_demo_master',
+              brand: 'mastercard' as CardBrand,
+              last4: '5678',
+              holder: 'José Roberto',
+              expMonth: 6,
+              expYear: now.getFullYear() + 2,
+              isDefault: false,
+              label: 'Cartão Reserva',
+            },
+          ] as PaymentCard[];
+          await persist(demo);
+          set({ items: demo, loading: false });
+          LOGGER.STORE.info('cards.mock.seed', { count: demo.length });
+          return;
+        }
+      } catch (e) {
+        LOGGER.STORE.warn('cards.mock.seed.failed', String(e));
+      }
+    }
     set({ items, loading: false });
   },
 

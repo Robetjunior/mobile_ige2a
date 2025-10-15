@@ -48,7 +48,7 @@ const AppNavigator: React.FC = () => {
           component={StationDetailScreen}
           options={{
             headerShown: true,
-            title: 'Station Details',
+            title: 'Detalhes da Estação',
             headerBackTitleVisible: false,
           }}
         />
@@ -57,7 +57,7 @@ const AppNavigator: React.FC = () => {
           component={QRScannerScreen}
           options={{
             headerShown: true,
-            title: 'Scan QR Code',
+            title: 'Escanear QR Code',
             headerBackTitleVisible: false,
           }}
         />
@@ -66,18 +66,18 @@ const AppNavigator: React.FC = () => {
           component={SessionDetailScreen}
           options={{
             headerShown: true,
-            title: 'Session Details',
+            title: 'Detalhes da Sessão',
             headerBackTitleVisible: false,
           }}
         />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: true, title: 'Settings', headerBackTitleVisible: false }} />
-        <Stack.Screen name="SettingsLanguage" component={SettingsLanguageScreen} options={{ headerShown: true, title: 'Language', headerBackTitleVisible: false }} />
-        <Stack.Screen name="SettingsPassword" component={SettingsPasswordScreen} options={{ headerShown: true, title: 'Change Password', headerBackTitleVisible: false }} />
-        <Stack.Screen name="SettingsPhone" component={SettingsPhoneScreen} options={{ headerShown: true, title: 'Phone', headerBackTitleVisible: false }} />
-        <Stack.Screen name="SettingsPile" component={SettingsPileScreen} options={{ headerShown: true, title: 'Pile setting', headerBackTitleVisible: false }} />
-        <Stack.Screen name="AccountCancel" component={AccountCancelScreen} options={{ headerShown: true, title: 'Account Cancellation', headerBackTitleVisible: false }} />
-        <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ headerShown: true, title: 'Favorites', headerBackTitleVisible: false }} />
-        <Stack.Screen name="Cards" component={CardsScreen} options={{ headerShown: true, title: 'My Card', headerBackTitleVisible: false }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: true, title: 'Configurações', headerBackTitleVisible: false }} />
+        <Stack.Screen name="SettingsLanguage" component={SettingsLanguageScreen} options={{ headerShown: true, title: 'Idioma', headerBackTitleVisible: false }} />
+        <Stack.Screen name="SettingsPassword" component={SettingsPasswordScreen} options={{ headerShown: true, title: 'Alterar Senha', headerBackTitleVisible: false }} />
+        <Stack.Screen name="SettingsPhone" component={SettingsPhoneScreen} options={{ headerShown: true, title: 'Telefone', headerBackTitleVisible: false }} />
+        <Stack.Screen name="SettingsPile" component={SettingsPileScreen} options={{ headerShown: true, title: 'Configurações do Carregador', headerBackTitleVisible: false }} />
+        <Stack.Screen name="AccountCancel" component={AccountCancelScreen} options={{ headerShown: true, title: 'Cancelamento de Conta', headerBackTitleVisible: false }} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ headerShown: true, title: 'Favoritos', headerBackTitleVisible: false }} />
+        <Stack.Screen name="Cards" component={CardsScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

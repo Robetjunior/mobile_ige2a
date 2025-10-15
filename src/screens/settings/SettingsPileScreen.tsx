@@ -30,10 +30,10 @@ const SettingsPileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Pile setting</Text>
+      <Text style={styles.title}>Configurações do Carregador</Text>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.rowText}>Auto start charging</Text>
+          <Text style={styles.rowText}>Iniciar carregamento automaticamente</Text>
           <Switch value={settings.autoStart} onValueChange={(v) => setSettings({ ...settings, autoStart: v })} />
         </View>
         <Text style={styles.hint}>Define comportamentos padrão ao iniciar uma sessão.</Text>

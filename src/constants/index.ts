@@ -91,12 +91,12 @@ export const STORAGE_KEYS = {
 
 export const SUPPORTED_LANGUAGES = {
   'pt-BR': 'Português',
-  'en': 'English',
+  'en': 'Inglês',
 } as const;
 
 export const CONNECTOR_TYPES = {
   CCS2: 'CCS2',
   CHADEMO: 'CHAdeMO',
-  TYPE2: 'Type 2',
-  TYPE1: 'Type 1',
+  TYPE2: 'Tipo 2',
+  TYPE1: 'Tipo 1',
 } as const;

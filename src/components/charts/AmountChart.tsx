@@ -63,17 +63,13 @@ export const AmountChart: React.FC<AmountChartProps> = ({
     },
   };
 
-  if (!data || data.length === 0) {
-    return (
-      <View style={[styles.container, isDarkMode && styles.containerDark]}>
-        <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, isDarkMode && styles.emptyTextDark]}>
-            Sem dados no período
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  // Mock default data when empty
+  const defaultMock = [
+    { x: '10-01', y: 25.5 },
+    { x: '10-02', y: 31.0 },
+    { x: '10-03', y: 72.25 },
+  ];
+  const displayData = (data && data.length > 0) ? data : defaultMock;
 
   return (
     <View style={[styles.container, isDarkMode && styles.containerDark]}>
@@ -109,7 +105,7 @@ export const AmountChart: React.FC<AmountChartProps> = ({
         />
         
         <VictoryBar
-          data={data}
+          data={displayData}
           x="x"
           y="y"
           style={{
@@ -155,19 +151,6 @@ const styles = StyleSheet.create({
   },
   titleDark: {
     color: '#fff',
-  },
-  emptyState: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  emptyTextDark: {
-    color: '#ccc',
   },
 });
 

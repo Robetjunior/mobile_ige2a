@@ -75,27 +75,25 @@ export const SessionsChart: React.FC<SessionsChartProps> = ({
     },
   };
 
+  // Mock default data when empty
+  const defaultMock: SessionsSeriesData[] = [
+    { x: '10-01', count: 1, kWh: 10.2 },
+    { x: '10-02', count: 1, kWh: 12.5 },
+    { x: '10-03', count: 1, kWh: 19.8 },
+  ];
+  const displayData = (data && data.length > 0) ? data : defaultMock;
+
   // Prepare data for bars (sessions count)
-  const barData = data.map(item => ({ x: item.x, y: item.count }));
+  const barData = displayData.map(item => ({ x: item.x, y: item.count }));
   
   // Prepare data for line (kWh)
-  const lineData = data.map(item => ({ x: item.x, y: item.kWh }));
+  const lineData = displayData.map(item => ({ x: item.x, y: item.kWh }));
 
   // Calculate max values for scaling
-  const maxCount = Math.max(...data.map(d => d.count));
-  const maxKWh = Math.max(...data.map(d => d.kWh));
+  const maxCount = Math.max(...displayData.map(d => d.count));
+  const maxKWh = Math.max(...displayData.map(d => d.kWh));
 
-  if (!data || data.length === 0) {
-    return (
-      <View style={[styles.container, isDarkMode && styles.containerDark]}>
-        <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, isDarkMode && styles.emptyTextDark]}>
-            Sem dados no período
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  // Always render chart using displayData (mocked if needed)
 
   return (
     <View style={[styles.container, isDarkMode && styles.containerDark]}>

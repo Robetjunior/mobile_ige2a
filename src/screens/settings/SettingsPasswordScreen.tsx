@@ -23,10 +23,10 @@ const SettingsPasswordScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Change Password</Text>
+      <Text style={styles.title}>Alterar Senha</Text>
       <View style={styles.card}>
-        <TextInput value={oldPassword} placeholder="Old password" secureTextEntry onChangeText={setOld} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
-        <TextInput value={newPassword} placeholder="New password" secureTextEntry onChangeText={setNew} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
+        <TextInput value={oldPassword} placeholder="Senha atual" secureTextEntry onChangeText={setOld} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
+        <TextInput value={newPassword} placeholder="Nova senha" secureTextEntry onChangeText={setNew} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {success && <Text style={styles.success}>Senha alterada com sucesso</Text>}

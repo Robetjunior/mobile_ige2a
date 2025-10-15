@@ -23,9 +23,9 @@ const SettingsPhoneScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Modify mobile phone number</Text>
+      <Text style={styles.title}>Alterar número de telefone</Text>
       <View style={styles.card}>
-        <TextInput value={phone} placeholder="Phone" keyboardType="phone-pad" onChangeText={setPhone} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
+        <TextInput value={phone} placeholder="Telefone" keyboardType="phone-pad" onChangeText={setPhone} style={styles.input} placeholderTextColor={COLORS.textSecondary} />
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {success && <Text style={styles.success}>Telefone atualizado</Text>}

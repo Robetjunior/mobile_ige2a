@@ -18,13 +18,13 @@ const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.title}>Configurações</Text>
       <View style={styles.card}>
-        <Row title="Change Password" icon="key-outline" onPress={() => navigation.navigate('SettingsPassword')} />
-        <Row title="Modify mobile phone number" icon="call-outline" onPress={() => navigation.navigate('SettingsPhone')} />
-        <Row title="Language Switching" icon="language-outline" onPress={() => navigation.navigate('SettingsLanguage')} />
-        <Row title="Pile setting" icon="construct-outline" onPress={() => navigation.navigate('SettingsPile')} />
-        <Row title="Account Cancellation" icon="trash-outline" onPress={() => navigation.navigate('AccountCancel')} />
+        <Row title="Alterar Senha" icon="key-outline" onPress={() => navigation.navigate('SettingsPassword')} />
+        <Row title="Alterar número de telefone" icon="call-outline" onPress={() => navigation.navigate('SettingsPhone')} />
+        <Row title="Trocar idioma" icon="language-outline" onPress={() => navigation.navigate('SettingsLanguage')} />
+        <Row title="Configurações do Carregador" icon="construct-outline" onPress={() => navigation.navigate('SettingsPile')} />
+        <Row title="Cancelamento de Conta" icon="trash-outline" onPress={() => navigation.navigate('AccountCancel')} />
       </View>
     </View>
   );

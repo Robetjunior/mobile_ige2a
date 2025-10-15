@@ -10,7 +10,6 @@ import {
   Alert,
   useColorScheme,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 // Store
 import { useRecordStore, useFormattedRecordData } from '../stores/recordStore';
@@ -19,8 +18,6 @@ import { useUserStore } from '../stores/userStore';
 // Components
 import { PeriodTabs } from '../components/record/PeriodTabs';
 import { PeriodPicker } from '../components/record/PeriodPicker';
-import { AmountChart } from '../components/charts/AmountChart';
-import { SessionsChart } from '../components/charts/SessionsChart';
 import { InfoCards } from '../components/record/InfoCards';
 import { OrderItem } from '../components/record/OrderItem';
 import { EmptyState } from '../components/record/EmptyState';
@@ -194,28 +191,13 @@ export const RecordScreen: React.FC = () => {
     );
   }, [isLoading, error]);
 
-  function ChartGuard({ children, label }: { children: React.ReactNode; label?: string }) {
-    return (
-      <ErrorBoundary
-        fallback={
-          <View style={{ paddingHorizontal: 16 }}>
-            {__DEV__ && label ? (
-              <Text style={{ color: '#6C757D', marginBottom: 8 }}>Fallback: {label}</Text>
-            ) : null}
-            <SkeletonChart />
-          </View>
-        }
-      >
-        {children}
-      </ErrorBoundary>
-    );
-  }
+  // Gráficos removidos da página /record conforme solicitado
 
   if (!ready) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={{ padding: 16 }}>
-          <Text>[RECORD] init… (modo: {periodMode})</Text>
+          <Text>Iniciando… (modo: {periodMode})</Text>
           <SkeletonChart />
           <View style={{ height: 8 }} />
           <SkeletonCards count={2} />
@@ -227,16 +209,12 @@ export const RecordScreen: React.FC = () => {
   return (
     <ErrorBoundary>
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Cabeçalho */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Order Record</Text>
-        <Ionicons name="menu-outline" size={24} color="#495057" />
+        <Text style={styles.headerTitle}>Registros</Text>
       </View>
 
-      {/* Probe de modo (Mês/Ano) */}
-      <View style={styles.modeProbe}>
-        <Text style={styles.modeProbeText}>[RECORD] ready (modo: {periodMode})</Text>
-      </View>
+      
 
       <FlatList
         data={sessions}
@@ -271,36 +249,9 @@ export const RecordScreen: React.FC = () => {
               />
             </View>
 
-            {/* Charts Section */}
-            <View style={styles.chartSection}>
-              {/* Amount Statistics Chart */}
-              {isLoading ? (
-                <SkeletonChart />
-              ) : (
-                <ChartGuard label="Amount">
-                  <AmountChart
-                    data={chartSummary?.amountSeries || []}
-                    periodMode={periodMode}
-                    isDarkMode={isDarkMode}
-                  />
-                </ChartGuard>
-              )}
-              
-              {/* Charging Sessions Chart */}
-              {isLoading ? (
-                <SkeletonChart />
-              ) : (
-                <ChartGuard label="Sessions">
-                  <SessionsChart
-                    data={chartSummary?.sessionsSeries || []}
-                    periodMode={periodMode}
-                    isDarkMode={isDarkMode}
-                  />
-                </ChartGuard>
-              )}
-            </View>
+            {/* Gráficos removidos */}
 
-            {/* Info Cards */}
+            {/* Quadrantes de Informações */}
             <View style={styles.cardsSection}>
               {isLoading ? (
                 <SkeletonCards count={3} />

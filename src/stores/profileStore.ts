@@ -42,7 +42,7 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         if (allowMock) {
           const mock: Me = {
             userId: 'Go250922150835958',
-            name: 'Demo User',
+            name: 'José Roberto',
             favoritesCount: 2,
             avatarUrl: null,
             language: 'pt-BR',

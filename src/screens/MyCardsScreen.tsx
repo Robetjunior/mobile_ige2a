@@ -5,6 +5,7 @@ import { COLORS, SIZES } from '../constants';
 import { useCardsStore } from '../stores/cardsStore';
 import CardItem from '../components/CardItem';
 import AddCardSheet from '../components/AddCardSheet';
+import { useNavigation } from '@react-navigation/native';
 
 const SkeletonCard: React.FC = () => (
   <View style={styles.skeleton} />
@@ -27,6 +28,7 @@ const EmptyState: React.FC<{ onAdd: () => void }> = ({ onAdd }) => (
 const MyCardsScreen: React.FC = () => {
   const { items, loading, load } = useCardsStore();
   const [sheetVisible, setSheetVisible] = useState(false);
+  const navigation = useNavigation<any>();
 
   useEffect(() => {
     load().catch(() => {
@@ -60,7 +62,26 @@ const MyCardsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Card</Text>
+        <TouchableOpacity
+          accessibilityLabel="Voltar"
+          onPress={() => {
+            if (Platform.OS === 'web') {
+              try {
+                const href = '/profile';
+                (globalThis as any)?.window?.location?.assign
+                  ? (globalThis as any).window.location.assign(href)
+                  : ((globalThis as any).window.location.href = href);
+              } catch {
+                navigation.navigate('Main', { screen: 'Me' });
+              }
+            } else {
+              navigation.navigate('Main', { screen: 'Me' });
+            }
+          }}
+        >
+          <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Meus Cartões</Text>
       </View>
       {content}
 
@@ -80,7 +101,7 @@ const MyCardsScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.backgroundSecondary },
-  header: { paddingTop: SIZES.lg, paddingHorizontal: SIZES.md, paddingBottom: SIZES.md },
+  header: { paddingTop: SIZES.lg, paddingHorizontal: SIZES.md, paddingBottom: SIZES.md, flexDirection: 'row', alignItems: 'center', gap: SIZES.sm as any },
   headerTitle: { color: COLORS.textPrimary, fontSize: SIZES.fontXL, fontWeight: '700' },
   skeleton: {
     height: 88,

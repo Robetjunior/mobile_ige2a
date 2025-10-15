@@ -27,7 +27,7 @@ const ProfileMeScreen: React.FC = () => {
 
   const Header = () => (
     <View style={styles.header}>
-      <Text style={styles.headerTitle}>Account</Text>
+      <Text style={styles.headerTitle}>Perfil</Text>
     </View>
   );
 
@@ -88,7 +88,7 @@ const ProfileMeScreen: React.FC = () => {
         <View style={styles.shortcutsGrid}>
           <TouchableOpacity style={styles.gridItem} onPress={() => navigation.navigate('Favorites')}>
             <Ionicons name="star" size={28} color="#f59e0b" />
-            <Text style={styles.gridTitle}>Recently Used</Text>
+            <Text style={styles.gridTitle}>Recentes</Text>
             {typeof me.favoritesCount === 'number' ? (
               <Text style={styles.gridSubtitle}>{me.favoritesCount} lugares</Text>
             ) : null}
@@ -96,32 +96,32 @@ const ProfileMeScreen: React.FC = () => {
           <View style={styles.gridDivider} />
           <TouchableOpacity style={styles.gridItem} onPress={() => navigation.navigate('Cards')}>
             <Ionicons name="wallet" size={28} color="#ef476f" />
-            <Text style={styles.gridTitle}>My Card</Text>
+            <Text style={styles.gridTitle}>Meus Cartões</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.optionsCard}>
         <TouchableOpacity style={styles.optionRow} onPress={() => navigation.navigate('Settings')}>
-          <View style={styles.optionLeft}><Ionicons name="settings-outline" size={20} color={COLORS.textPrimary} /><Text style={styles.optionText}>Setting</Text></View>
+          <View style={styles.optionLeft}><Ionicons name="settings-outline" size={20} color={COLORS.textPrimary} /><Text style={styles.optionText}>Configurações</Text></View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.optionRow} onPress={() => setAboutOpen(true)}>
-          <View style={styles.optionLeft}><Ionicons name="information-circle-outline" size={20} color={COLORS.textPrimary} /><Text style={styles.optionText}>About us</Text></View>
+          <View style={styles.optionLeft}><Ionicons name="information-circle-outline" size={20} color={COLORS.textPrimary} /><Text style={styles.optionText}>Sobre</Text></View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={styles.signOutBtn} onPress={async () => { await logout(); (navigation as any).navigate('Home'); }}>
-        <Text style={styles.signOutText}>Sign out</Text>
+        <Text style={styles.signOutText}>Sair</Text>
       </TouchableOpacity>
 
       <Modal visible={aboutOpen} transparent animationType="fade" onRequestClose={() => setAboutOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>About</Text>
-            <Text style={styles.modalText}>App version 1.0.0</Text>
-            <Text style={styles.modalText}>Terms: example.com/terms • Contact: suporte@example.com</Text>
+            <Text style={styles.modalTitle}>Sobre</Text>
+            <Text style={styles.modalText}>Versão do aplicativo 1.0.0</Text>
+            <Text style={styles.modalText}>Termos: example.com/terms • Contato: suporte@example.com</Text>
             <TouchableOpacity style={styles.modalClose} onPress={() => setAboutOpen(false)}>
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>

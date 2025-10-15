@@ -150,14 +150,14 @@ export const CardItem: React.FC<CardItemProps> = ({ card }) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
     padding: SIZES.md,
     marginHorizontal: SIZES.md,
     marginVertical: SIZES.sm,
     borderRadius: SIZES.radiusMD,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: COLORS.black,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '86%',
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
     borderRadius: SIZES.radiusMD,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   modalSaveText: {
-    color: COLORS.white,
+    color: '#fff',
     fontWeight: '700',
   },
 });
