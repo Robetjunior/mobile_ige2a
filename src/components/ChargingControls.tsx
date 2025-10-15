@@ -92,18 +92,18 @@ export default function ChargingControls({ chargeBoxId, defaultIdTag, defaultCon
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 16, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 12 },
-  title: { fontWeight: '700', color: '#111827', marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, padding: 10, marginBottom: 10 },
-  row: { flexDirection: 'row', gap: 10 },
-  btn: { flex: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+  wrap: { marginTop: 16, padding: 14, backgroundColor: '#FFFFFF', borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  title: { fontWeight: '700', color: '#111827', marginBottom: 10, fontSize: 16 },
+  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 10, marginBottom: 10 },
+  row: { flexDirection: 'row', gap: 12 },
+  btn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center', minHeight: 48, justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   startBtn: { backgroundColor: COLORS.primary },
   stopBtn: { backgroundColor: COLORS.error },
   disabled: { opacity: 0.5 },
-  btnText: { color: '#fff', fontWeight: '700' },
-  statusRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  btnText: { color: '#fff', fontWeight: '700', letterSpacing: 0.2 },
+  statusRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   status: { color: '#374151' },
-  retry: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#E5E7EB', borderRadius: 6 },
+  retry: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#E5E7EB', borderRadius: 8 },
   retryText: { color: '#111827', fontWeight: '600' },
 });

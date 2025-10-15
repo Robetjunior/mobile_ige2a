@@ -6,6 +6,7 @@ import ChargerService from '../services/chargerService';
 import ChargingControls from '../components/ChargingControls';
 import type { OnlineChargerItem } from '../types';
 import { COLORS, SIZES } from '../constants';
+import ProgressRing from '../components/ProgressRing';
 import type { TabParamList } from '../navigation/TabNavigator';
 import { useSessionStore } from '../stores/sessionStore';
 import { Telemetry } from '../lib/telemetry';
@@ -165,6 +166,20 @@ export default function ChargeScreen() {
     return String(val);
   };
 
+  // Progresso e ETA (mock inicial, preparado para dados reais)
+  const targetKWh = useMemo(() => {
+    const envTarget = Number((process as any)?.env?.EXPO_PUBLIC_CHARGE_TARGET_KWH || 0);
+    return envTarget > 0 ? envTarget : 20;
+  }, []);
+  const energyKWh = currentSession?.energyKWh ?? 0;
+  const powerKw = currentSession?.powerKw ?? (details?.powerKw ?? 7);
+  const progressPct = Math.max(0, Math.min(1, targetKWh > 0 ? energyKWh / targetKWh : 0));
+  const etaMin = useMemo(() => {
+    if (!powerKw || powerKw <= 0) return null;
+    const remaining = Math.max(0, targetKWh - energyKWh);
+    return Math.round((remaining / powerKw) * 60);
+  }, [powerKw, targetKWh, energyKWh]);
+
   const handleStart = async () => {
     if (!chargeBoxId) return;
     try {
@@ -283,15 +298,19 @@ export default function ChargeScreen() {
         )}
       </View>
 
-      <View style={styles.ringCard}>
-        <View style={styles.ringOuter}>
-          <View style={styles.ringInner}>
-            <Ionicons name="car" size={56} color="#1ABC9C" />
-            <Text style={styles.percentText}>%</Text>
-            <Text style={styles.etaText}>ETA:   kWh alvo: </Text>
-          </View>
+      <View style={styles.headerCard}>
+        <View style={styles.headerRow}>
+          <ProgressRing
+            size={140}
+            strokeWidth={10}
+            progress={progressPct}
+            color={COLORS.primary}
+            trackColor="#E5E7EB"
+            label={topLabel || 'Pronto'}
+            // Removido conforme solicitação: ocultar ETA e Meta no subtítulo
+            subtitle={undefined}
+          />
         </View>
-        {/* Removido bloco superior de ação; apenas mantém o cartão com o ring */}
       </View>
 
       {!!chargeBoxId && (
@@ -303,21 +322,39 @@ export default function ChargeScreen() {
         />
       )}
 
-      <View style={styles.grid}>
+      {/* KPIs principais */}
+      <View style={styles.kpiGridRow}>
         {[
-          { label: 'Potência', value: fmt(currentSession?.powerKw ?? 0, 'kW') },
-          { label: 'Tensão', value: fmt(currentSession?.voltageV ?? 0, 'V') },
-          { label: 'Corrente', value: fmt(currentSession?.currentA ?? 0, 'A') },
-          { label: 'Duração', value: `${Math.max(0, Math.floor((currentSession?.duration ?? 0)))} min` },
-          { label: 'Início', value: currentSession?.startTime ? new Date(currentSession.startTime).toLocaleTimeString() : '' },
-          { label: 'Valor Total', value: (() => { const v = currentSession?.totalAmount ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })() },
-          { label: 'Preço Unitário', value: (() => { const v = currentSession?.unitPrice ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })() },
-          { label: 'Energia', value: fmt(currentSession?.energyKWh ?? 0, 'KWh') },
-          { label: 'Temperatura', value: fmt(currentSession?.temperatureC ?? 0, '°C') },
+          { label: 'Potência', value: fmt(currentSession?.powerKw ?? 0, 'kW'), icon: 'flash-outline' as const, color: '#2563EB' },
+          { label: 'Duração', value: `${Math.max(0, Math.floor((currentSession?.duration ?? 0)))} min`, icon: 'time-outline' as const, color: '#111827' },
+          { label: 'Valor Total', value: (() => { const v = currentSession?.totalAmount ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })(), icon: 'cash-outline' as const, color: '#27AE60' },
         ].map((m, idx) => (
-          <View key={idx} style={styles.metricCard}>
-            <Text style={styles.metricValue}>{m.value}</Text>
-            <Text style={styles.metricLabel}>{m.label}</Text>
+          <View key={idx} style={styles.kpiCardLg}>
+            <View style={styles.kpiHeader}>
+              <Ionicons name={m.icon} size={16} color={m.color} />
+              <Text style={styles.kpiLabel}>{m.label}</Text>
+            </View>
+            <Text style={styles.kpiValueLg}>{m.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* KPIs secundários */}
+      <View style={styles.kpiGridWrap}>
+        {[
+          { label: 'Tensão', value: fmt(currentSession?.voltageV ?? 0, 'V'), icon: 'analytics-outline' as const },
+          { label: 'Corrente', value: fmt(currentSession?.currentA ?? 0, 'A'), icon: 'speedometer-outline' as const },
+          { label: 'Energia', value: fmt(currentSession?.energyKWh ?? 0, 'kWh'), icon: 'flash-outline' as const },
+          { label: 'Preço Unitário', value: (() => { const v = currentSession?.unitPrice ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })(), icon: 'pricetag-outline' as const },
+          { label: 'Temperatura', value: fmt(currentSession?.temperatureC ?? 0, '°C'), icon: 'thermometer-outline' as const },
+          { label: 'Início', value: currentSession?.startTime ? new Date(currentSession.startTime).toLocaleTimeString() : '', icon: 'time-outline' as const },
+        ].map((m, idx) => (
+          <View key={idx} style={styles.kpiCardSm}>
+            <View style={styles.kpiHeader}>
+              <Ionicons name={m.icon} size={14} color="#6C757D" />
+              <Text style={styles.kpiLabel}>{m.label}</Text>
+            </View>
+            <Text style={styles.kpiValueSm}>{m.value}</Text>
           </View>
         ))}
       </View>
@@ -413,8 +450,8 @@ function getStatusFg(status?: string) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
   content: { padding: SIZES.padding },
-  statusHeader: { alignItems: 'center', marginBottom: 14 },
-  statusBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4B5563', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  statusHeader: { alignItems: 'center', marginBottom: 12 },
+  statusBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4B5563', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   statusLabel: { color: COLORS.white, fontWeight: '600' },
   helpIcon: { marginLeft: 8 },
   badgesRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
@@ -423,11 +460,9 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999 },
   pillText: { fontSize: 12, fontWeight: '700' },
 
-  ringCard: { alignItems: 'center', marginVertical: 16 },
-  ringOuter: { width: 240, height: 240, borderRadius: 120, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-  ringInner: { width: 200, height: 200, borderRadius: 100, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
-  percentText: { marginTop: 8, color: '#16A34A', fontWeight: '700' },
-  etaText: { marginTop: 4, color: '#6B7280', fontSize: 12 },
+  headerCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3, marginBottom: 12, alignItems: 'center' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  headerInfo: { flex: 1, marginLeft: 16 },
 
   primaryButton: { marginTop: 16, borderRadius: 24, paddingVertical: 12, paddingHorizontal: 28 },
   startBtn: { backgroundColor: COLORS.primary },
@@ -436,10 +471,15 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontWeight: '700' },
   priceSubtext: { marginTop: 8, color: '#6B7280' },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 8 },
-  metricCard: { width: '48%', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 12, marginBottom: 10 },
-  metricValue: { fontSize: 16, fontWeight: '700', color: COLORS.black },
-  metricLabel: { marginTop: 2, color: COLORS.gray },
+  // KPIs
+  kpiGridRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  kpiCardLg: { flex: 1, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  kpiHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  kpiLabel: { color: '#6B7280', fontSize: 12 },
+  kpiValueLg: { marginTop: 4, fontSize: 18, fontWeight: '700', color: COLORS.black },
+  kpiGridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
+  kpiCardSm: { width: '48%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  kpiValueSm: { marginTop: 2, fontSize: 16, fontWeight: '700', color: COLORS.black },
 
   panelContainer: { marginTop: 8, backgroundColor: '#F3F4F6', borderRadius: 12 },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12 },

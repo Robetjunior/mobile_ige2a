@@ -367,6 +367,10 @@ export const HomeScreen = () => {
     inputRange: [0, 1],
     outputRange: [LIST_HEIGHT * 0.3, LIST_HEIGHT],
   });
+  const placeholderOpacity = listAnimatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
 
   return (
     <View style={styles.container}>
@@ -385,14 +389,14 @@ export const HomeScreen = () => {
 
       <View style={styles.mapContainer}>
         {Platform.OS === 'web' ? (
-          <View style={[styles.map, styles.webMapPlaceholder]}>
+          <Animated.View pointerEvents="none" style={[styles.map, styles.webMapPlaceholder, { opacity: placeholderOpacity }]}>
             <Text style={styles.webMapText}>
               Mapa não disponível na versão web
             </Text>
             <Text style={styles.webMapSubtext}>
               Use o aplicativo móvel para visualizar o mapa
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           <MapComponent
             mapRef={mapRef}
@@ -580,6 +584,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    zIndex: 1,
   },
   listContainer: {
     position: 'absolute',
@@ -594,6 +599,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 8,
+    zIndex: 2,
   },
   listHeader: {
     alignItems: 'center',
@@ -643,6 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 0,
   },
   webMapText: {
     fontSize: SIZES.body2,
