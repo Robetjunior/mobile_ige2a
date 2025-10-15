@@ -28,6 +28,7 @@ import { StationCard } from '../components/StationCard';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { MapComponent } from '../components/MapComponent';
+import HomeMap from '../components/HomeMap';
 import { useLocation } from '../hooks/useLocation';
 import { useStationStore } from '../stores/stationStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -389,14 +390,13 @@ export const HomeScreen = () => {
 
       <View style={styles.mapContainer}>
         {Platform.OS === 'web' ? (
-          <Animated.View pointerEvents="none" style={[styles.map, styles.webMapPlaceholder, { opacity: placeholderOpacity }]}>
-            <Text style={styles.webMapText}>
-              Mapa não disponível na versão web
-            </Text>
-            <Text style={styles.webMapSubtext}>
-              Use o aplicativo móvel para visualizar o mapa
-            </Text>
-          </Animated.View>
+          <View style={styles.map}>
+            <HomeMap
+              stations={displayedStations}
+              onMarkerPress={handleMarkerPress}
+              getMarkerColor={getMarkerColor}
+            />
+          </View>
         ) : (
           <MapComponent
             mapRef={mapRef}
