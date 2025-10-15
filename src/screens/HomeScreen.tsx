@@ -49,12 +49,14 @@ type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAP_HEIGHT = SCREEN_HEIGHT * 0.6;
-const LIST_HEIGHT = SCREEN_HEIGHT * 0.45;
+// No web, a lista pode ocupar mais área para leitura
+const LIST_HEIGHT = Platform.OS === 'web' ? SCREEN_HEIGHT * 0.7 : SCREEN_HEIGHT * 0.45;
 
 export const HomeScreen = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const mapRef = useRef<MapView>(null);
-  const listAnimatedValue = useRef(new Animated.Value(0)).current;
+  // Inicia expandida no web para garantir visibilidade imediata
+  const listAnimatedValue = useRef(new Animated.Value(Platform.OS === 'web' ? 1 : 0)).current;
   
   const { location, hasPermission, requestPermission, getCurrentLocation } = useLocation();
   const {
@@ -72,7 +74,7 @@ export const HomeScreen = () => {
   const { currentSession } = useSessionStore();
 
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [isListExpanded, setIsListExpanded] = useState(false);
+  const [isListExpanded, setIsListExpanded] = useState(Platform.OS === 'web');
   const [mapRegion, setMapRegion] = useState<MapRegion>(MAP_DEFAULTS.region);
   const [error, setError] = useState<string | null>(null);
   // Estado da lista online
@@ -366,7 +368,10 @@ export const HomeScreen = () => {
 
   const listHeight = listAnimatedValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [LIST_HEIGHT * 0.3, LIST_HEIGHT],
+    outputRange: [
+      (Platform.OS === 'web' ? LIST_HEIGHT * 0.4 : LIST_HEIGHT * 0.3),
+      LIST_HEIGHT,
+    ],
   });
   const placeholderOpacity = listAnimatedValue.interpolate({
     inputRange: [0, 1],
@@ -430,7 +435,7 @@ export const HomeScreen = () => {
           </TouchableOpacity>
 
         {isLoading ? (
-          <View style={{ paddingHorizontal: SIZES.padding }}>
+          <View style={{ paddingHorizontal: SIZES.padding, backgroundColor: COLORS.white }}>
             <SkeletonList count={6} />
           </View>
         ) : (
@@ -465,6 +470,7 @@ export const HomeScreen = () => {
                 }}
               />
             )}
+            style={styles.listBackground}
             ListEmptyComponent={
               <Text style={styles.webMapSubtext}>Nenhum carregador encontrado</Text>
             }
@@ -568,7 +574,7 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: 'absolute',
-    bottom: 20,
+    bottom: Platform.OS === 'web' ? 90 : 20,
     right: 20,
     width: 50,
     height: 50,
@@ -590,8 +596,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: COLORS.lightGray,
+    bottom: Platform.OS === 'web' ? 70 : 0,
+    backgroundColor: COLORS.white,
     borderTopLeftRadius: SIZES.radius * 2,
     borderTopRightRadius: SIZES.radius * 2,
     shadowColor: COLORS.black,
@@ -599,13 +605,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 8,
-    zIndex: 2,
+    zIndex: 10,
   },
   listHeader: {
     alignItems: 'center',
     paddingVertical: SIZES.base,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray + '20',
+    backgroundColor: COLORS.white,
   },
   dragHandle: {
     width: 40,
@@ -615,7 +622,11 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.base / 2,
   },
   listContent: {
+    paddingHorizontal: SIZES.padding,
     paddingBottom: SIZES.padding * 2,
+  },
+  listBackground: {
+    backgroundColor: COLORS.white,
   },
   quickActionsRow: {
     flexDirection: 'row',
