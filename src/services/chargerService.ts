@@ -50,6 +50,13 @@ interface OcppOnlineResponse {
 }
 
 export class ChargerService {
+  static buildGetOptions(): RequestInit {
+    const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
+    const publicHeaders: Record<string, string> = { 'Cache-Control': 'no-cache', 'X-API-Key': API_KEY };
+    const opts: RequestInit = { method: 'GET', headers: publicHeaders };
+    if (isWeb) (opts as any).mode = 'cors';
+    return opts;
+  }
   static ensureConfig() {
     if (!API_BASE) {
       LOGGER.API.warn('EXPO_PUBLIC_API_BASE_URL not set; defaulting to http://localhost:3000');
@@ -63,11 +70,15 @@ export class ChargerService {
     this.ensureConfig();
     const url = `${API_BASE}/v1/ocpp/online`;
     const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
-    const headers: Record<string, string> = { 'Cache-Control': 'no-cache' };
+    const headers: Record<string, string> = { 'Cache-Control': 'no-cache', 'X-API-Key': API_KEY };
     const attempts = 3;
     let lastErr: any = null;
-    // Use only the original URL to respect CORS origin policies (no 127.0.0.1 fallback)
+    // Prefer configured URL; add localhost fallbacks when developing on web to bypass remote CORS/network issues
+    const devHost = isWeb ? (window.location?.hostname || '') : '';
     const candidates: string[] = [url];
+    if (isWeb && ['localhost', '127.0.0.1', '0.0.0.0'].includes(devHost)) {
+      candidates.push('http://localhost:3000/v1/ocpp/online', 'http://127.0.0.1:3000/v1/ocpp/online');
+    }
 
     for (const candidateUrl of candidates) {
       for (let i = 0; i < attempts; i++) {
@@ -165,14 +176,15 @@ export class ChargerService {
     const url = `${API_BASE}/v1/chargers/online`;
     try {
       LOGGER.API.info('GET /v1/chargers/online', { baseUrl: API_BASE });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${text}`);
       }
-      const data: ChargerDto[] = await res.json();
-      LOGGER.API.debug('Online chargers fetched', { count: data?.length ?? 0 });
-      return data.map(this.mapDtoToStation);
+      const raw = await res.json();
+      const list: ChargerDto[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
+      LOGGER.API.debug('Online chargers fetched', { count: list?.length ?? 0 });
+      return list.map(this.mapDtoToStation);
     } catch (err) {
       LOGGER.API.error('getOnlineChargers failed', err);
       throw err;
@@ -188,14 +200,15 @@ export class ChargerService {
     const url = `${API_BASE}/v1/chargers/online?${qs}`;
     try {
       LOGGER.API.info('GET /v1/chargers/online', { baseUrl: API_BASE, qs });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${text}`);
       }
-      const data: ChargerDto[] = await res.json();
-      LOGGER.API.debug('Online recent chargers fetched', { count: data?.length ?? 0, sinceMinutes, limit });
-      return data.map(this.mapDtoToStation);
+      const raw = await res.json();
+      const list: ChargerDto[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
+      LOGGER.API.debug('Online recent chargers fetched', { count: list?.length ?? 0, sinceMinutes, limit });
+      return list.map(this.mapDtoToStation);
     } catch (err) {
       LOGGER.API.error('getOnlineChargersRecent failed', err);
       throw err;
@@ -211,7 +224,7 @@ export class ChargerService {
     const url = `${API_BASE}/v1/chargers/online?${params.toString()}`;
     try {
       LOGGER.API.info('GET /v1/chargers/online (status list)', { sinceMinutes, limit });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${text}`);
@@ -242,7 +255,7 @@ export class ChargerService {
     const url = `${API_BASE}/v1/chargers${qs ? `?${qs}` : ''}`;
     try {
       LOGGER.API.info('GET /v1/chargers', { baseUrl: API_BASE, qs });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${text}`);
@@ -260,13 +273,22 @@ export class ChargerService {
     const url = `${API_BASE}/v1/chargers/${encodeURIComponent(chargeBoxId)}`;
     try {
       LOGGER.API.info('GET /v1/chargers/:id', { baseUrl: API_BASE, chargeBoxId });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${text}`);
       }
-      const dto: ChargerDto = await res.json();
-      return this.mapDtoToStation(dto);
+      const dto: any = await res.json();
+      const base = this.mapDtoToStation(dto) as any;
+      // Enrich with detail fields used by ChargeScreen/useChargerState
+      base.chargeBoxId = dto.chargeBoxId || base.id;
+      base.lastStatus = dto.lastStatus || dto.status || null;
+      base.lastTransactionId = dto.lastTransactionId ?? null;
+      base.wsOnline = dto.wsOnline ?? undefined;
+      base.connectors = Array.isArray(dto.connectors)
+        ? dto.connectors.map((c: any) => ({ connectorId: c.connectorId ?? c.id ?? c.connector_id, status: c.status }))
+        : (Array.isArray(base.connectors) ? base.connectors : []);
+      return base as Station;
     } catch (err) {
       LOGGER.API.error('getChargerDetails failed', err);
       throw err;
@@ -482,7 +504,7 @@ export class ChargerService {
     const url = `${API_BASE}/v1/debug/ocpp/last-tx/${encodeURIComponent(chargeBoxId)}`;
     try {
       LOGGER.API.info('GET /v1/debug/ocpp/last-tx/:chargeBoxId', { chargeBoxId });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         return null;
       }
@@ -502,7 +524,7 @@ export class ChargerService {
     const url = `${API_BASE}/v1/sessions?${params.toString()}`;
     try {
       LOGGER.API.info('GET /v1/sessions (by charge_box_id)', { chargeBoxId });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         LOGGER.API.warn('getActiveTransactionIdFromList non-200', { status: res.status, text });
@@ -529,7 +551,7 @@ export class ChargerService {
     const url = `${API_BASE}/v1/debug/ocpp/status/${encodeURIComponent(chargeBoxId)}`;
     try {
       LOGGER.API.info('GET /v1/debug/ocpp/status/:chargeBoxId', { chargeBoxId });
-      const res = await this.fetchWithTimeout(url, { method: 'GET', headers });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         LOGGER.API.warn('getOcppStatus non-200', { status: res.status, text });
@@ -664,6 +686,73 @@ export class ChargerService {
     const listTx = await this.getActiveTransactionIdFromList(chargeBoxId).catch(() => null);
     if (listTx != null) return Number(listTx);
     return null;
+  }
+  static async getOcppSnapshot(chargeBoxId: string): Promise<{ online: boolean; lastHeartbeat?: string | null } | null> {
+    const url = `${API_BASE}/v1/ocpp/${encodeURIComponent(chargeBoxId)}/snapshot`;
+    try {
+      const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
+      const publicHeaders: Record<string, string> = { 'Cache-Control': 'no-cache', 'X-API-Key': API_KEY };
+      const res = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'GET',
+          headers: publicHeaders,
+          ...(isWeb ? ({ mode: 'cors' } as RequestInit) : {}),
+        },
+        12000
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        LOGGER.API.warn('getOcppSnapshot non-200', { status: res.status, text });
+        return null;
+      }
+      const data = await res.json().catch(() => null);
+      // Support both shapes:
+      // 1) { online: boolean, lastHeartbeat?: string }
+      // 2) { chargeBoxId, lastHeartbeat?: string, snapshot: { online: boolean, lastHeartbeat?: string } }
+      if (!data) return null;
+      const online = (typeof data.online === 'boolean') ? !!data.online
+        : (data?.snapshot && typeof data.snapshot.online === 'boolean') ? !!data.snapshot.online
+        : false;
+      const lastHeartbeat = (data?.lastHeartbeat ?? data?.lastHeartbeatAt ?? data?.snapshot?.lastHeartbeat ?? data?.snapshot?.lastHeartbeatAt ?? null) as (string | null | undefined);
+      return { online, lastHeartbeat: lastHeartbeat ?? null };
+    } catch (err) {
+      LOGGER.API.warn('getOcppSnapshot failed', err);
+      return null;
+    }
+  }
+
+  static async getCommandStatus(commandId: string): Promise<any | null> {
+    const url = `${API_BASE}/v1/commands/${encodeURIComponent(commandId)}`;
+    try {
+      LOGGER.API.info('GET /v1/commands/:commandId', { commandId });
+      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions(), 12000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+        LOGGER.API.warn('getCommandStatus non-200', { status: res.status, data });
+        return { status: 'failed', error: String(msg) };
+      }
+      return data;
+    } catch (err) {
+      LOGGER.API.warn('getCommandStatus failed', err);
+      return null;
+    }
+  }
+
+  static async pollCommandStatus(commandId: string, timeoutMs = 15000, intervalMs = 1500): Promise<'accepted'|'failed'|'timeout'> {
+    const t0 = Date.now();
+    let last: any = null;
+    while (Date.now() - t0 < timeoutMs) {
+      const st = await this.getCommandStatus(commandId).catch(() => null);
+      last = st;
+      const s = (st?.status || '').toLowerCase();
+      if (s === 'accepted' || s === 'ok' || s === 'success') return 'accepted';
+      if (s === 'failed' || s === 'error') return 'failed';
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    LOGGER.API.warn('pollCommandStatus timeout', { commandId, last });
+    return 'timeout';
   }
 }
 

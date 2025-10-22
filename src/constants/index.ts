@@ -87,6 +87,13 @@ export const STORAGE_KEYS = {
   THEME: '@ev_charging_theme',
   LANGUAGE: '@ev_charging_language',
   CARDS: '@ev_charging_cards',
+  // Persisted Home filters & radius
+  HOME_FILTERS: '@ev_charging_home_filters',
+  HOME_RADIUS: '@ev_charging_home_radius',
+  // Recently used drawer items
+  RECENTS: '@ev_charging_recents',
+  // Home submenu last selection
+  HOME_MENU_LAST_SELECTION: '@ev_charging_home_menu_last_selection',
 } as const;
 
 export const SUPPORTED_LANGUAGES = {

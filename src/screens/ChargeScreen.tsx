@@ -1,9 +1,13 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import ChargerService from '../services/chargerService';
-import ChargingControls from '../components/ChargingControls';
+import CircularGauge from '../components/CircularGauge';
+import PrimaryCTA from '../components/PrimaryCTA';
+import MetricCard from '../components/MetricCard';
+import SessionInfoAccordion from '../components/SessionInfoAccordion';
+import { useChargerState } from '../hooks/useChargerState';
 import type { OnlineChargerItem } from '../types';
 import { COLORS, SIZES } from '../constants';
 import ProgressRing from '../components/ProgressRing';
@@ -34,6 +38,7 @@ export default function ChargeScreen() {
   const [preparedTxId, setPreparedTxId] = useState<string | null>(null);
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+const cs = useChargerState(chargeBoxId || '');
 
   useEffect(() => {
     const fromParams = route?.params?.chargeBoxId || null;
@@ -41,7 +46,7 @@ export default function ChargeScreen() {
     if (Platform.OS === 'web') {
       try {
         const usp = new URLSearchParams((globalThis as any)?.window?.location?.search || '');
-        fromQuery = usp.get('chargeBoxId');
+        fromQuery = usp.get('chargeBoxId') || usp.get('chargeboxid');
       } catch {}
     }
     setChargeBoxId(fromParams || fromQuery || null);
@@ -49,6 +54,11 @@ export default function ChargeScreen() {
 
   useEffect(() => {
     if (me?.defaultIdTag && !startIdTag) setStartIdTag(me.defaultIdTag);
+    // Fallback via variável de ambiente se perfil não tiver idTag
+    if (!startIdTag && !me?.defaultIdTag) {
+      const envTag = (process.env.EXPO_PUBLIC_DEFAULT_IDTAG || '').trim();
+      if (envTag) setStartIdTag(envTag);
+    }
   }, [me?.defaultIdTag]);
 
   useEffect(() => {
@@ -104,9 +114,9 @@ export default function ChargeScreen() {
   };
 
   const availableConnectors = useMemo(() => {
-    const conns = online?.connectors || [];
+    const conns = cs.details?.connectors || [];
     return conns.filter(c => (c.status || '').toLowerCase() === 'available');
-  }, [online?.connectors]);
+  }, [cs.details?.connectors]);
 
   const isCharging = useMemo(() => {
     const status = (online?.lastStatus || '').toLowerCase();
@@ -154,6 +164,19 @@ export default function ChargeScreen() {
     return 'Tarifa indisponível';
   }, [currentSession?.unitPrice]);
 
+  const headerLabelPt = useMemo(() => {
+    switch (cs.ui.headerLabel) {
+      case 'No order in progress':
+        return 'Pronto';
+      case 'Charging…':
+        return 'Carregando';
+      case 'Finalizing…':
+        return 'Finalizando…';
+      default:
+        return cs.ui.headerLabel;
+    }
+  }, [cs.ui.headerLabel]);
+
   function pushToast(type: 'info'|'warn'|'error'|'success', message: string) {
     const id = toastSeq.current++;
     setToasts((prev) => [...prev, { id, type, message }]);
@@ -183,100 +206,57 @@ export default function ChargeScreen() {
   const handleStart = async () => {
     if (!chargeBoxId) return;
     try {
-      setIsStarting(true);
       Telemetry.track('charge.remote_start.request', { chargeBoxId, connectorId: startConnectorId || null });
       if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       const effIdTag = (startIdTag?.trim() || me?.defaultIdTag?.trim() || (process.env.EXPO_PUBLIC_DEFAULT_IDTAG || '').trim() || 'DEMO-USER');
-      await ChargerService.remoteStart({
-        chargeBoxId,
-        connectorId: startConnectorId || undefined,
-        idTag: effIdTag,
-      });
+      const connectorNum = startConnectorId ? Number(startConnectorId) : (availableConnectors[0]?.connectorId ?? undefined);
+      const result = await cs.start(effIdTag, connectorNum);
       setStartVisible(false);
-      Telemetry.track('charge.remote_start.success', { chargeBoxId });
-      pushToast('success', online?.wsOnline ? 'Comando enviado ao CP.' : 'Comando pendente (CP offline).');
-      if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      fetchData(chargeBoxId);
+      if (result === 'accepted') {
+        Telemetry.track('charge.remote_start.success', { chargeBoxId });
+        pushToast('success', 'Comando enviado ao CP.');
+        if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } else if (result === 'timeout') {
+        Telemetry.track('charge.remote_start.timeout', { chargeBoxId });
+        pushToast('warn', 'Tempo esgotado ao iniciar.');
+      } else {
+        Telemetry.track('charge.remote_start.fail', { chargeBoxId });
+        pushToast('error', 'Não foi possível iniciar.');
+        if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      }
     } catch (e: any) {
       Telemetry.track('charge.remote_start.fail', { chargeBoxId, error: e?.message });
       pushToast('error', e?.message || 'Não foi possível iniciar.');
       if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-    } finally {
-      setIsStarting(false);
     }
   };
 
   const handleStop = async () => {
     if (!chargeBoxId) return;
-    // Descobrir transactionId com helper unificado
-    let tx: number | null = await ChargerService.discoverActiveTransactionId(chargeBoxId);
-    if (tx == null) {
-      const fromMem: any = online?.lastTransactionId ?? preparedTxId ?? null;
-      if (typeof fromMem === 'number') tx = fromMem; else if (fromMem != null) tx = Number(fromMem);
-    }
-    if (tx == null) {
-      Alert.alert('Sem sessão ativa', 'Não foi possível identificar a transação em andamento.');
-      return;
-    }
     Alert.alert('Parar carregamento', 'Deseja encerrar a sessão atual?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Parar', style: 'destructive', onPress: async () => {
-          setIsStopping(true);
           try {
-            Telemetry.track('charge.remote_stop.request', { chargeBoxId, transactionId: tx });
+            Telemetry.track('charge.remote_stop.request', { chargeBoxId });
             if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            // Opcional: checar status OCPP
-            const ocppStatus = await ChargerService.getOcppStatus(chargeBoxId).catch(() => null);
-
-            const resp = await ChargerService.remoteStop({ transactionId: tx! });
-            const sentNow = !((resp as any)?.status === 'pending' || (resp as any)?.pending);
-
-            if (Platform.OS === 'web') {
-              try {
-                await ChargerService.waitForSessionEndSSE(chargeBoxId, 20000);
-                pushToast('success', 'Sessão encerrada (confirmada via SSE).');
-                setPreparedTxId(null);
-                setCurrentSession(null as any);
-              } catch (err) {
-                // SSE expirou: tenta polling da sessão por transactionId
-                const confirmed = await ChargerService.waitForSessionEndPoll(tx!, 15000);
-                if (confirmed) {
-                  pushToast('success', 'Sessão encerrada (confirmada por polling).');
-                  setPreparedTxId(null);
-                  setCurrentSession(null as any);
-                } else {
-                  if (sentNow) {
-                    pushToast('info', 'Aguardando confirmação (SSE indisponível).');
-                  } else {
-                    pushToast('info', 'Comando pendente. CP offline ou sessão já finalizada.');
-                  }
-                }
-              }
+            const result = await cs.stop();
+            if (result === 'accepted') {
+              Telemetry.track('charge.remote_stop.success', { chargeBoxId });
+              pushToast('success', 'Sessão encerrada');
+              if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            } else if (result === 'timeout') {
+              Telemetry.track('charge.remote_stop.timeout', { chargeBoxId });
+              pushToast('warn', 'Tempo esgotado ao encerrar.');
             } else {
-              // Mobile/Native: polling simples
-              const confirmed = await ChargerService.waitForSessionEndPoll(tx!, 15000);
-              if (confirmed) {
-                pushToast('success', 'Sessão encerrada.');
-                setPreparedTxId(null);
-                setCurrentSession(null as any);
-              } else {
-                if (sentNow) pushToast('info', 'Comando enviado ao CP. Aguardando confirmação.');
-                else pushToast('info', 'Comando pendente. CP offline ou sessão já finalizada.');
-              }
+              Telemetry.track('charge.remote_stop.fail', { chargeBoxId });
+              pushToast('error', 'Não foi possível encerrar.');
+              if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
             }
-
-            stopPolling();
-            await new Promise((r) => setTimeout(r, 1000));
-            await fetchData(chargeBoxId);
-            Telemetry.track('charge.remote_stop.success', { chargeBoxId, transactionId: tx, wsOnline: online?.wsOnline, ocppStatus });
-            if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           } catch (e: any) {
-            Telemetry.track('charge.remote_stop.fail', { chargeBoxId, transactionId: tx, error: e?.message });
+            Telemetry.track('charge.remote_stop.fail', { chargeBoxId, error: e?.message });
             pushToast('error', e?.message || 'Não foi possível encerrar.');
             if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-          } finally {
-            setIsStopping(false);
           }
         }
       }
@@ -287,67 +267,65 @@ export default function ChargeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.statusHeader}>
         <View style={styles.statusBar}>
-          {topLabel ? (<Text style={styles.statusLabel}>{topLabel}</Text>) : null}
+          <Text style={styles.statusLabel}>{headerLabelPt}</Text>
         </View>
-        {!!online?.lastStatus && (
+        {!!cs.details?.lastStatus && (
           <View style={styles.badgesRow}>
-            <View style={[styles.pill, { backgroundColor: getStatusBg(online.lastStatus) }]}>
-              <Text style={[styles.pillText, { color: getStatusFg(online.lastStatus) }]}>{online.lastStatus}</Text>
+            <View style={[styles.pill, { backgroundColor: getStatusBg(cs.details!.lastStatus!) }]}>
+              <Text style={[styles.pillText, { color: getStatusFg(cs.details!.lastStatus!) }]}>{cs.details!.lastStatus!}</Text>
             </View>
           </View>
         )}
       </View>
 
       <View style={styles.headerCard}>
-        <View style={styles.headerRow}>
-          <ProgressRing
-            size={140}
-            strokeWidth={10}
-            progress={progressPct}
-            color={COLORS.primary}
-            trackColor="#E5E7EB"
-            label={topLabel || 'Pronto'}
-            // Removido conforme solicitação: ocultar ETA e Meta no subtítulo
-            subtitle={undefined}
-          />
-        </View>
+        <CircularGauge percent={typeof cs.progressPct === 'number' ? cs.progressPct : null} size={160} />
       </View>
 
-      {!!chargeBoxId && (
-        <ChargingControls
-          chargeBoxId={chargeBoxId}
-          defaultIdTag={startIdTag}
-          defaultConnectorId={availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId}
-          onToast={pushToast}
+      <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+        <PrimaryCTA
+          label={cs.ui.ctaLabel === 'Start Charging' ? 'Iniciar Carregamento' : 'Parar Carregamento'}
+          loading={cs.ui.ctaLoading}
+          disabled={!chargeBoxId || cs.ui.ctaDisabled}
+          variant={cs.ui.ctaLabel === 'Start Charging' ? 'start' : 'stop'}
+          onPress={() => {
+            if (!chargeBoxId) {
+              pushToast('info', 'Selecione um carregador para continuar.');
+              return;
+            }
+            if (cs.ui.ctaLabel === 'Start Charging') {
+              setStartVisible(true);
+            } else {
+              cs.stop()
+                .then((st) => {
+                  pushToast(
+                    st === 'accepted' ? 'success' : st === 'timeout' ? 'warn' : 'error',
+                    st === 'accepted' ? 'Sessão encerrada' : st === 'timeout' ? 'Tempo esgotado' : 'Falha ao parar'
+                  );
+                })
+                .catch((e) => pushToast('error', String(e?.message || e)));
+            }
+          }}
         />
-      )}
+      </View>
+
 
       {/* KPIs principais */}
       <View style={styles.kpiGridRow}>
-        {[
-          { label: 'Potência', value: fmt(currentSession?.powerKw ?? 0, 'kW'), icon: 'flash-outline' as const, color: '#2563EB' },
-          { label: 'Duração', value: `${Math.max(0, Math.floor((currentSession?.duration ?? 0)))} min`, icon: 'time-outline' as const, color: '#111827' },
-          { label: 'Valor Total', value: (() => { const v = currentSession?.totalAmount ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })(), icon: 'cash-outline' as const, color: '#27AE60' },
-        ].map((m, idx) => (
-          <View key={idx} style={styles.kpiCardLg}>
-            <View style={styles.kpiHeader}>
-              <Ionicons name={m.icon} size={16} color={m.color} />
-              <Text style={styles.kpiLabel}>{m.label}</Text>
-            </View>
-            <Text style={styles.kpiValueLg}>{m.value}</Text>
-          </View>
-        ))}
+        <MetricCard title="Potência" value={String(Math.round(cs.metrics.powerKw))} unit="kW" />
+        <MetricCard title="Duração" value={`${Math.max(0, Math.floor(cs.metrics.durationMin))} min`} />
+        <MetricCard title="Valor Total" value={(() => { const v = cs.metrics.totalAmount || 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })()} />
       </View>
 
       {/* KPIs secundários */}
       <View style={styles.kpiGridWrap}>
         {[
-          { label: 'Tensão', value: fmt(currentSession?.voltageV ?? 0, 'V'), icon: 'analytics-outline' as const },
-          { label: 'Corrente', value: fmt(currentSession?.currentA ?? 0, 'A'), icon: 'speedometer-outline' as const },
-          { label: 'Energia', value: fmt(currentSession?.energyKWh ?? 0, 'kWh'), icon: 'flash-outline' as const },
-          { label: 'Preço Unitário', value: (() => { const v = currentSession?.unitPrice ?? 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })(), icon: 'pricetag-outline' as const },
-          { label: 'Temperatura', value: fmt(currentSession?.temperatureC ?? 0, '°C'), icon: 'thermometer-outline' as const },
-          { label: 'Início', value: currentSession?.startTime ? new Date(currentSession.startTime).toLocaleTimeString() : '', icon: 'time-outline' as const },
+          { label: 'Tensão', value: fmt(cs.metrics.voltageV, 'V'), icon: 'analytics-outline' as const },
+          { label: 'Corrente', value: fmt(cs.metrics.currentA, 'A'), icon: 'speedometer-outline' as const },
+          { label: 'Energia', value: fmt(cs.metrics.energyKWh, 'kWh'), icon: 'flash-outline' as const },
+          { label: 'Preço Unitário', value: (() => { const v = cs.metrics.unitPrice || 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) + '/kWh'; } catch { return `R$ ${v.toFixed(2)}/kWh`; } })(), icon: 'pricetag-outline' as const },
+          { label: 'Temperatura', value: fmt(cs.metrics.temperatureC, '°C'), icon: 'thermometer-outline' as const },
+          { label: 'Início', value: cs.metrics.startTime ? new Date(cs.metrics.startTime).toLocaleTimeString() : '', icon: 'time-outline' as const },
         ].map((m, idx) => (
           <View key={idx} style={styles.kpiCardSm}>
             <View style={styles.kpiHeader}>
@@ -359,18 +337,11 @@ export default function ChargeScreen() {
         ))}
       </View>
 
-      <View style={styles.panelContainer}>
-        <TouchableOpacity onPress={() => setPanelOpen((p) => !p)} accessibilityLabel="Abrir painel de sessão" style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Sessão & Conector</Text>
-          <Ionicons name={panelOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
-        </TouchableOpacity>
-        {panelOpen && (
-          <View style={styles.panelBody}>
-            <Text style={styles.panelRow}>Estação: {details?.name || chargeBoxId || ''}</Text>
-            <Text style={styles.panelRow}>Conector: #{availableConnectors[0]?.connectorId || online?.connectors?.[0]?.connectorId || ''}  Status: {online?.lastStatus || ''}</Text>
-          </View>
-        )}
-      </View>
+      <SessionInfoAccordion
+        connectorId={availableConnectors[0]?.connectorId || cs.details?.connectors?.[0]?.connectorId || null}
+        idTag={startIdTag || me?.defaultIdTag || null}
+        transactionId={cs.details?.lastTransactionId ?? null}
+      />
 
       <Modal visible={startVisible} transparent animationType="slide" onRequestClose={() => setStartVisible(false)}>
         <View style={styles.sheetBackdrop}>
@@ -390,14 +361,13 @@ export default function ChargeScreen() {
                 <Text style={styles.sheetHint}>Nenhum conector disponível</Text>
               )}
             </View>
-            <Text style={styles.sheetLabel}>idTag</Text>
-            <TextInput style={styles.input} placeholder="Digite seu idTag" value={startIdTag} onChangeText={setStartIdTag} autoCapitalize="none" />
+            {/* idTag removido: usaremos automaticamente o idTag do perfil ou padrão */}
             <View style={styles.sheetActions}>
               <TouchableOpacity style={[styles.sheetBtn, styles.sheetCancel]} onPress={() => setStartVisible(false)}>
                 <Text style={styles.sheetBtnText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.sheetBtn, styles.sheetConfirm, isStarting && styles.disabled]} onPress={handleStart} disabled={isStarting}>
-                <Text style={[styles.sheetBtnText, { color: '#fff' }]}>{isStarting ? 'Iniciando…' : 'Iniciar'}</Text>
+              <TouchableOpacity style={[styles.sheetBtn, styles.sheetConfirm, cs.commandLoading && styles.disabled]} onPress={handleStart} disabled={cs.commandLoading}>
+                <Text style={[styles.sheetBtnText, { color: '#fff' }]}>{cs.commandLoading ? 'Iniciando…' : 'Iniciar'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -501,7 +471,7 @@ const styles = StyleSheet.create({
   sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12 },
   sheetBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
   sheetCancel: { backgroundColor: '#F3F4F6' },
-  sheetConfirm: { backgroundColor: COLORS.primary },
+  sheetConfirm: { backgroundColor: '#16A34A' },
   sheetBtnText: { fontWeight: '700', color: COLORS.black },
 
   toasterWrap: { position: 'absolute', bottom: 16, left: 0, right: 0, alignItems: 'center' },

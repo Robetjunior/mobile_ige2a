@@ -20,6 +20,8 @@ import { ErrorMessage } from '../components/ErrorMessage';
 import { Station, Connector } from '../types';
 import { COLORS, SIZES } from '../constants';
 import { apiService } from '../services/api';
+import { LOGGER } from '../lib/logger';
+import { Platform as RNPlatform } from 'react-native';
 
 type RootStackParamList = {
   StationDetail: { stationId: string };
@@ -40,9 +42,12 @@ export const StationDetailScreen = () => {
   const [station, setStation] = useState<Station | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
     loadStationDetails();
+    // Atualiza últimos 10 logs quando carregando detalhes
+    setLogs(LOGGER.getBuffer().slice(-5));
   }, [stationId]);
 
   const loadStationDetails = async () => {
@@ -51,6 +56,7 @@ export const StationDetailScreen = () => {
     if (storeStation) {
       setStation(storeStation);
       setError(null);
+      setLogs(LOGGER.getBuffer().slice(-5));
       return;
     }
 
@@ -59,17 +65,22 @@ export const StationDetailScreen = () => {
     
     // Then fetch fresh data from API
     try {
+      LOGGER.API.info('StationDetail: fetching station id', { stationId });
       const response = await apiService.getStationById(stationId);
       if (response.success) {
         setStation(response.data);
+        LOGGER.API.info('StationDetail: station loaded', { id: response.data?.id, name: response.data?.name });
       } else {
         setError('Estação não encontrada');
+        LOGGER.API.warn('StationDetail: not found', { stationId, message: response.message });
       }
     } catch (error) {
       console.error('Error loading station details:', error);
       setError('Falha ao carregar detalhes da estação. Verifique sua conexão.');
+      LOGGER.API.error('StationDetail: fetch failed', { stationId, error: String(error) });
     } finally {
       setIsLoading(false);
+      setLogs(LOGGER.getBuffer().slice(-5));
     }
   };
 
@@ -168,11 +179,35 @@ export const StationDetailScreen = () => {
 
   if (error && !station) {
     return (
-      <ErrorMessage
-        title="Erro ao carregar estação"
-        message={error}
-        onRetry={loadStationDetails}
-      />
+      <ScrollView style={styles.container} contentContainerStyle={{ alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>
+        <ErrorMessage
+          title="Erro ao carregar estação"
+          message={error}
+          onRetry={loadStationDetails}
+        />
+        <View style={styles.logsPanel}
+>
+          <Text style={styles.logsTitle}>Logs recentes (5)</Text>
+          {logs.map((line, idx) => (
+            <Text key={idx} style={styles.logLine}>{line}</Text>
+          ))}
+          <TouchableOpacity
+            style={styles.copyButton}
+            onPress={async () => {
+              const content = logs.join('\n');
+              try {
+                // @ts-ignore
+                if (navigator?.clipboard?.writeText) {
+                  // @ts-ignore
+                  await navigator.clipboard.writeText(content);
+                }
+              } catch {}
+            }}
+          >
+            <Text style={styles.copyButtonText}>Copiar 5 logs</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -219,13 +254,15 @@ export const StationDetailScreen = () => {
 
         <View style={styles.infoRow}>
           <Ionicons name="flash" size={20} color={COLORS.gray} />
-          <Text style={styles.infoText}>R$ {station.pricePerKWh.toFixed(2)} por kWh</Text>
+          <Text style={styles.infoText}>
+            {typeof station.pricePerKWh === 'number' ? `R$ ${station.pricePerKWh.toFixed(2)} por kWh` : 'Preço não informado'}
+          </Text>
         </View>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Conectores</Text>
-        {station.connectors.map((connector) => (
+        {station.connectors && station.connectors.length > 0 ? station.connectors.map((connector) => (
           <View key={connector.id} style={styles.connectorCard}>
             <View style={styles.connectorInfo}>
               <Ionicons
@@ -256,7 +293,9 @@ export const StationDetailScreen = () => {
               </TouchableOpacity>
             )}
           </View>
-        ))}
+        )) : (
+          <Text style={styles.infoText}>Nenhum conector informado</Text>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -296,6 +335,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
+    logsPanel: {
+      width: '100%',
+      padding: SIZES.padding,
+      borderTopWidth: 1,
+      borderTopColor: COLORS.lightGray,
+    },
+    logsTitle: {
+      fontSize: SIZES.body2,
+      fontWeight: '600',
+      color: COLORS.black,
+      marginBottom: SIZES.base,
+    },
+    logLine: {
+      fontSize: SIZES.caption,
+      color: COLORS.gray,
+      marginBottom: 4,
+    },
+    copyButton: { backgroundColor: COLORS.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'flex-start' },
+    copyButtonText: { color: '#fff', fontWeight: '600' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants';
 
@@ -83,18 +83,12 @@ const CustomTabBar: React.FC<CustomTabBarProps> = ({ state, descriptors, navigat
               size={SIZES.iconMD}
               color={isFocused ? COLORS.primary : COLORS.textSecondary}
             />
+            <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+              {label}
+            </Text>
           </TouchableOpacity>
         );
       })}
-      
-      {/* Central FAB for QR Scanner */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('QRScanner')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="qr-code" size={SIZES.iconLG} color={COLORS.background} />
-      </TouchableOpacity>
     </View>
   );
 };
@@ -122,11 +116,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingBottom: SIZES.sm,
-    paddingTop: SIZES.sm,
+    paddingBottom: 6,
+    paddingTop: 6,
     paddingHorizontal: SIZES.md,
     position: 'relative',
-    height: 70,
+    height: 60,
     alignItems: 'center',
   },
   tabItem: {
@@ -135,25 +129,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: SIZES.xs,
   },
-  fab: {
-    position: 'absolute',
-    top: -25,
-    left: '50%',
-    marginLeft: -25,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: COLORS.textPrimary,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
+  tabLabel: {
+    marginTop: 4,
+    fontSize: SIZES.fontXS,
+    color: COLORS.textSecondary,
+  },
+  tabLabelActive: {
+    color: COLORS.primary,
+    fontWeight: '600',
   },
 });
 

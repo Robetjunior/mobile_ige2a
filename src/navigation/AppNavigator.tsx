@@ -14,6 +14,8 @@ import SettingsPileScreen from '../screens/settings/SettingsPileScreen';
 import AccountCancelScreen from '../screens/settings/AccountCancelScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import CardsScreen from '../screens/CardsScreen';
+import SupportScreen from '../screens/SupportScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -28,13 +30,13 @@ export type RootStackParamList = {
   AccountCancel: undefined;
   Favorites: undefined;
   Cards: undefined;
+  Support: undefined;
+  About: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator: React.FC = () => {
-  // Using dynamic linking from navigation/linking to handle 8081/8083/https origins
-
   return (
     <NavigationContainer linking={linking}>
       <Stack.Navigator
@@ -43,8 +45,8 @@ const AppNavigator: React.FC = () => {
         }}
       >
         <Stack.Screen name="Main" component={TabNavigator} />
-        <Stack.Screen 
-          name="StationDetail" 
+        <Stack.Screen
+          name="StationDetail"
           component={StationDetailScreen}
           options={{
             headerShown: true,
@@ -52,8 +54,8 @@ const AppNavigator: React.FC = () => {
             headerBackTitleVisible: false,
           }}
         />
-        <Stack.Screen 
-          name="QRScanner" 
+        <Stack.Screen
+          name="QRScanner"
           component={QRScannerScreen}
           options={{
             headerShown: true,
@@ -61,8 +63,8 @@ const AppNavigator: React.FC = () => {
             headerBackTitleVisible: false,
           }}
         />
-        <Stack.Screen 
-          name="SessionDetail" 
+        <Stack.Screen
+          name="SessionDetail"
           component={SessionDetailScreen}
           options={{
             headerShown: true,
@@ -78,9 +80,13 @@ const AppNavigator: React.FC = () => {
         <Stack.Screen name="AccountCancel" component={AccountCancelScreen} options={{ headerShown: true, title: 'Cancelamento de Conta', headerBackTitleVisible: false }} />
         <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ headerShown: true, title: 'Favoritos', headerBackTitleVisible: false }} />
         <Stack.Screen name="Cards" component={CardsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Support" component={SupportScreen} options={{ headerShown: true, title: 'Ajuda/Suporte', headerBackTitleVisible: false }} />
+        <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: true, title: 'Sobre', headerBackTitleVisible: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
 
 export default AppNavigator;
+
+

@@ -8,6 +8,8 @@ export interface Station {
   connectors: Connector[];
   distance?: number;
   isFavorite?: boolean;
+  // Free Parking flag for filter/badge display
+  freeParking?: boolean;
   rules?: string;
   schedule?: string;
 }

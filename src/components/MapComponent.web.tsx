@@ -20,12 +20,5 @@ interface MapComponentProps {
 }
 
 export const MapComponent: React.FC<MapComponentProps> = () => {
-  return (
-    <View style={{ flex: 1, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="map" size={48} color={COLORS.gray} />
-      <Text style={{ color: COLORS.gray, marginTop: SIZES.base }}>
-        Map unavailable on web preview. Use the mobile app.
-      </Text>
-    </View>
-  );
+  return <View style={{ flex: 1 }} />;
 };

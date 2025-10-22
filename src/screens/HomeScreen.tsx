@@ -29,17 +29,22 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { MapComponent } from '../components/MapComponent';
 import HomeMap from '../components/HomeMap';
+import { SearchBar } from '../components/SearchBar';
 import { useLocation } from '../hooks/useLocation';
 import { useStationStore } from '../stores/stationStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { Station, DistanceFilter, OnlineChargerItem } from '../types';
-import { COLORS, SIZES, MAP_DEFAULTS } from '../constants';
+import { COLORS, SIZES, MAP_DEFAULTS, STORAGE_KEYS } from '../constants';
 import { SkeletonList } from '../components/record/SkeletonList';
 import ChargerService from '../services/chargerService';
 import { Telemetry } from '../lib/telemetry';
 import OnlineChargerCard from '../components/OnlineChargerCard';
+import { RecentDrawer, RecentItem } from '../components/RecentDrawer';
+import RadiusChips from '../components/RadiusChips';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Modal, TextInput, Switch } from 'react-native';
+import { HomeMenuSheet } from '../components/HomeMenuSheet';
+import { useHomeMenuStore } from '../stores/homeMenuStore';
 
 type RootStackParamList = {
   StationDetail: { stationId: string };
@@ -70,15 +75,28 @@ export const HomeScreen = () => {
     setLoading,
     toggleFavorite,
     loadFavorites,
+    // new store flags
+    favoritesOnly,
+    freeParkingOnly,
+    idleOnly,
+    setFavoritesOnly,
+    setFreeParkingOnly,
+    setIdleOnly,
+    loadHomeFilters,
   } = useStationStore();
   const { currentSession } = useSessionStore();
 
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  const { open: openHomeMenu, menuEnabledV2 } = useHomeMenuStore();
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [recentsVisible, setRecentsVisible] = useState(false);
+  const [recents, setRecents] = useState<RecentItem[]>([]);
   const [isListExpanded, setIsListExpanded] = useState(Platform.OS === 'web');
   const [mapRegion, setMapRegion] = useState<MapRegion>(MAP_DEFAULTS.region);
   const [error, setError] = useState<string | null>(null);
   // Estado da lista online
   const [onlineItems, setOnlineItems] = useState<OnlineChargerItem[]>([]);
+  const [onlineStations, setOnlineStations] = useState<Station[]>([]);
   const [onlineTotal, setOnlineTotal] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 20;
@@ -105,6 +123,7 @@ export const HomeScreen = () => {
   const initializeScreen = async () => {
     try {
       await loadFavorites();
+      await loadHomeFilters();
       // Carrega favoritos da lista online e status dos CPs
       await loadOnlineFavs();
       await loadOnlineStatusList();
@@ -171,21 +190,23 @@ export const HomeScreen = () => {
     setLoading(true);
     setError(null);
     try {
-      // Usa exclusivamente /v1/ocpp/online sem parâmetros para obter IDs WS online
-      const ids = await ChargerService.getOcppOnlineIds();
-      const items = ids.map((id) => ({
-        chargeBoxId: id,
-        wsOnline: true,
-        onlineRecently: false,
-        connectors: [],
-        name: id,
-      } as OnlineChargerItem));
-      setOnlineItems(items);
-      setOnlineTotal(items.length);
+      // Primeiro tenta /v1/chargers/online (postos de carregamento)
+      const stations = await ChargerService.getOnlineChargers();
+      setOnlineStations(stations);
+      setOnlineTotal(stations.length);
       setPage(1);
     } catch (error) {
-      console.error('Error loading online status list:', error);
-      setError('Erro ao carregar lista online. Tente novamente.');
+      console.warn('getOnlineChargers falhou, usando fallback de OCPP online', error);
+      try {
+        // Fallback: usa OCPP WS online e enriquece com detalhes quando possível
+        const fallback = await ChargerService.getOnlineStationsNow();
+        setOnlineStations(fallback);
+        setOnlineTotal(fallback.length);
+        setPage(1);
+      } catch (err2) {
+        console.error('Error loading online status list (fallback):', err2);
+        setError('Erro ao carregar lista online. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -204,6 +225,16 @@ export const HomeScreen = () => {
       setFavIds(next);
       await AsyncStorage.setItem(FAV_KEY, JSON.stringify(next));
     } catch {}
+  };
+
+  const loadRecents = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.RECENTS);
+      const arr: RecentItem[] = raw ? JSON.parse(raw) : [];
+      setRecents(arr);
+    } catch {
+      setRecents([]);
+    }
   };
 
   const openStartSheet = (item: OnlineChargerItem) => {
@@ -295,8 +326,18 @@ export const HomeScreen = () => {
     return ta.localeCompare(tb);
   }
 
+  function sortStations(a: Station, b: Station) {
+    const hasAvail = (s: Station) => (s.connectors || []).some((c) => (c.status || '').toLowerCase() === 'available');
+    const pa = hasAvail(a) ? 0 : 1;
+    const pb = hasAvail(b) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    const ta = (a.name || a.id).toLowerCase();
+    const tb = (b.name || b.id).toLowerCase();
+    return ta.localeCompare(tb);
+  }
+
   const handleStationPress = (station: Station) => {
-    navigation.navigate('StationDetail', { stationId: station.id });
+    navigation.navigate('Charge' as never, { chargeBoxId: station.id } as never);
   };
 
   const handleMarkerPress = (station: Station) => {
@@ -309,7 +350,7 @@ export const HomeScreen = () => {
       });
     }
     Telemetry.track('home.open_station', { stationId: station.id, source: 'marker' });
-    navigation.navigate('StationDetail', { stationId: station.id });
+    navigation.navigate('Charge' as never, { chargeBoxId: station.id } as never);
   };
 
   const handleRegionChange = (region: MapRegion) => {
@@ -362,8 +403,11 @@ export const HomeScreen = () => {
 
   const displayedStations = filteredStations;
 
-  // Lista online ordenada (sem busca/filtros)
-  const sortedOnline = [...onlineItems].sort(sortOnlineItems);
+  // Lista online ordenada com filtros (favoritesOnly/idleOnly)
+  const sortedOnline = onlineStations
+    .filter((it) => !favoritesOnly || favIds.includes(it.id))
+    .filter((it) => !idleOnly || (it.connectors || []).length === 0 || (it.connectors || []).some((c) => (c.status || '').toLowerCase() === 'available'))
+    .sort(sortStations);
   const visibleOnline = sortedOnline.slice(0, page * pageSize);
 
   const listHeight = listAnimatedValue.interpolate({
@@ -380,7 +424,40 @@ export const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* SearchBar removida */}
+      {/* Header overlay com Search + filtros (Wow Charger style) */}
+      <View style={styles.headerOverlay}>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder={'Digite termos de busca'}
+          onRightPress={async () => {
+            await loadRecents();
+            setRecentsVisible(true);
+          }}
+          onRightPressWithAnchor={async (anchor) => { if (menuEnabledV2) { openHomeMenu(anchor); } else { await loadRecents(); setRecentsVisible(true); } }}
+          rightIconName={'menu'}
+        />
+        <View style={styles.filtersSection}>
+          <View style={styles.filtersHeaderRow}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setFiltersVisible(true)} style={styles.filtersHeaderLeft}>
+              <Ionicons name="funnel" size={16} color={'#D5D8DC'} />
+              <Text style={styles.filtersHeaderText}>Filtro</Text>
+            </TouchableOpacity>
+            <View style={styles.filtersDivider} />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setFavoritesOnly(!favoritesOnly)}
+              style={styles.filtersHeaderRight}
+            >
+              <Ionicons name={favoritesOnly ? 'star' : 'star-outline'} size={16} color={'#D5D8DC'} />
+              <Text style={styles.filtersHeaderText}>Favoritos</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Radius chips */}
+          <RadiusChips value={distanceFilter as DistanceFilter} onChange={(d) => setDistanceFilter(d)} />
+        </View>
+      </View>
+      <HomeMenuSheet />
       {!hasPermission && (
         <View style={styles.permissionBanner}>
           <Ionicons name="location-outline" size={16} color={COLORS.gray} />
@@ -417,8 +494,22 @@ export const HomeScreen = () => {
         <TouchableOpacity
           style={styles.recenterButton}
           onPress={handleRecenterPress}
+          activeOpacity={0.85}
         >
-          <Ionicons name="locate" size={24} color={COLORS.primary} />
+          <Ionicons name="locate" size={28} color={COLORS.primary} />
+        </TouchableOpacity>
+        {/* QR scanner FAB */}
+        <TouchableOpacity
+          style={styles.qrFab}
+          onPress={() => {
+            try {
+              // @ts-ignore
+              navigation.navigate('QRScanner');
+            } catch {}
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="qr-code" size={24} color={COLORS.white} />
         </TouchableOpacity>
         {/* Bottom sheet sobre o mapa */}
         <Animated.View style={[styles.listContainer, { height: listHeight }]}>
@@ -441,33 +532,12 @@ export const HomeScreen = () => {
         ) : (
           <FlatList
             data={visibleOnline}
-            keyExtractor={(item) => item.chargeBoxId}
+            keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <OnlineChargerCard
-                item={item}
-                isFavorite={favIds.includes(item.chargeBoxId)}
-                onToggleFavorite={() => toggleOnlineFavorite(item.chargeBoxId)}
-                onDetails={() => navigation.navigate('StationDetail', { stationId: item.chargeBoxId })}
-                onStart={() => openStartSheet(item)}
-                onStop={() => stopBilling(item)}
-                onPress={() => {
-                  if (Platform.OS === 'web') {
-                    try {
-                      // Navegação direta por URL com query
-                      const href = `/charge?chargeBoxId=${encodeURIComponent(item.chargeBoxId)}`;
-                      (globalThis as any)?.window?.location?.assign
-                        ? (globalThis as any).window.location.assign(href)
-                        : ((globalThis as any).window.location.href = href);
-                    } catch {
-                      // Fallback para navegação nativa caso o ambiente web não esteja disponível
-                      // @ts-ignore - navegando pela tab
-                      navigation.navigate('Charge' as never, { chargeBoxId: item.chargeBoxId } as never);
-                    }
-                  } else {
-                    // @ts-ignore - navegando pela tab
-                    navigation.navigate('Charge' as never, { chargeBoxId: item.chargeBoxId } as never);
-                  }
-                }}
+              <StationCard
+                station={{ ...item, isFavorite: favIds.includes(item.id) }}
+                onFavoritePress={() => toggleOnlineFavorite(item.id)}
+                onPress={() => navigation.navigate('Charge' as never, { chargeBoxId: item.id } as never)}
               />
             )}
             style={styles.listBackground}
@@ -484,7 +554,28 @@ export const HomeScreen = () => {
           )}
         </Animated.View>
       </View>
-      {/* FilterModal removido */}
+      <FilterModal
+        visible={filtersVisible}
+        onClose={() => setFiltersVisible(false)}
+        onConfirm={() => setFiltersVisible(false)}
+        freeParkingOnly={freeParkingOnly}
+        idleOnly={idleOnly}
+        onToggleFreeParking={() => setFreeParkingOnly(!freeParkingOnly)}
+        onToggleIdle={() => setIdleOnly(!idleOnly)}
+      />
+
+      <RecentDrawer
+        visible={recentsVisible}
+        onClose={() => setRecentsVisible(false)}
+        items={recents}
+        onSelect={(item) => {
+          setRecentsVisible(false);
+          try {
+            // @ts-ignore
+            navigation.navigate('Charge' as never, { chargeBoxId: item.chargeBoxId } as never);
+          } catch {}
+        }}
+      />
 
       {/* Bottom sheet iniciar sessão */}
       <Modal
@@ -574,23 +665,111 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? 90 : 20,
-    right: 20,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.white,
+    bottom: Platform.OS === 'web' ? 84 : 24,
+    left: '50%',
+    marginLeft: -28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.black,
+    shadowColor: COLORS.textPrimary,
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    zIndex: 1,
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+    zIndex: 5,
+  },
+  qrFab: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 84 : 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.textPrimary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+    zIndex: 6,
+  },
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 20 : 8,
+    paddingBottom: 8,
+    backgroundColor: '#3D3F45',
+    zIndex: 6,
+  },
+  filtersSection: {
+    paddingHorizontal: SIZES.md,
+    paddingTop: 6,
+  },
+  filtersHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  filtersHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6 as any,
+  },
+  filtersHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6 as any,
+  },
+  filtersHeaderText: {
+    color: '#D5D8DC',
+    fontSize: SIZES.fontSM,
+    fontWeight: '600',
+  },
+  filtersDivider: {
+    height: 16,
+    width: 1,
+    backgroundColor: '#D5D8DC',
+    opacity: 0.6,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    gap: 8 as any,
+    paddingTop: 6,
+    paddingBottom: 8,
+  },
+  distanceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.textLight,
+    backgroundColor: 'transparent',
+  },
+  distanceChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  distanceChipText: {
+    marginLeft: 6,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    fontSize: SIZES.fontSM,
+  },
+  distanceChipTextActive: {
+    color: COLORS.background,
   },
   listContainer: {
     position: 'absolute',

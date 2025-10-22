@@ -7,25 +7,26 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES, DISTANCE_FILTERS } from '../constants';
-import { DistanceFilter } from '../types';
+import { COLORS, SIZES } from '../constants';
 
 interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
-  selectedDistance: DistanceFilter;
-  onDistanceChange: (distance: DistanceFilter) => void;
-  showFavoritesOnly: boolean;
-  onFavoritesToggle: () => void;
+  onConfirm: () => void;
+  freeParkingOnly: boolean;
+  idleOnly: boolean;
+  onToggleFreeParking: () => void;
+  onToggleIdle: () => void;
 }
 
 export const FilterModal: React.FC<FilterModalProps> = ({
   visible,
   onClose,
-  selectedDistance,
-  onDistanceChange,
-  showFavoritesOnly,
-  onFavoritesToggle,
+  onConfirm,
+  freeParkingOnly,
+  idleOnly,
+  onToggleFreeParking,
+  onToggleIdle,
 }) => {
   return (
     <Modal
@@ -44,58 +45,61 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Distância</Text>
-            {DISTANCE_FILTERS.map((distance) => (
-              <TouchableOpacity
-                key={distance}
-                style={[
-                  styles.option,
-                  selectedDistance === distance && styles.selectedOption,
-                ]}
-                onPress={() => onDistanceChange(distance)}
-              >
-                <Text
-                  style={[
-                    styles.optionText,
-                    selectedDistance === distance && styles.selectedOptionText,
-                  ]}
-                >
-                  {distance} km
-                </Text>
-                {selectedDistance === distance && (
-                  <Ionicons name="checkmark" size={20} color={COLORS.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.section}>
             <TouchableOpacity
               style={[
                 styles.option,
-                showFavoritesOnly && styles.selectedOption,
+                freeParkingOnly && styles.selectedOption,
               ]}
-              onPress={onFavoritesToggle}
+              onPress={onToggleFreeParking}
+              accessibilityRole="button"
+              accessibilityLabel="Filtrar por Free Parking"
             >
               <Text
                 style={[
                   styles.optionText,
-                  showFavoritesOnly && styles.selectedOptionText,
                 ]}
               >
-                Apenas favoritos
+                Free Parking (P)
               </Text>
               <Ionicons
-                name={showFavoritesOnly ? 'heart' : 'heart-outline'}
+                name={freeParkingOnly ? 'checkbox' : 'square-outline'}
                 size={20}
-                color={showFavoritesOnly ? COLORS.primary : COLORS.gray}
+                color={freeParkingOnly ? COLORS.primary : COLORS.gray}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.option,
+                idleOnly && styles.selectedOption,
+              ]}
+              onPress={onToggleIdle}
+              accessibilityRole="button"
+              accessibilityLabel="Exibir apenas pontos Idle"
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                ]}
+              >
+                Idle state
+              </Text>
+              <Ionicons
+                name={idleOnly ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={idleOnly ? COLORS.primary : COLORS.gray}
               />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.applyButton} onPress={onClose}>
-            <Text style={styles.applyButtonText}>Aplicar Filtros</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: SIZES.padding }}>
+            <TouchableOpacity style={[styles.applyButton, { backgroundColor: COLORS.lightGray }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancelar filtros">
+              <Text style={[styles.applyButtonText, { color: COLORS.black }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.applyButton} onPress={onConfirm} accessibilityRole="button" accessibilityLabel="Aplicar filtros">
+              <Text style={styles.applyButtonText}>Confirmar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
