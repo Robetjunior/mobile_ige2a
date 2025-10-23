@@ -209,3 +209,23 @@ export interface SessionTelemetryState {
   isPolling: boolean;
   error: string | null;
 }
+
+export interface BillingInvoice {
+  transaction_id: string; // transaction id from backend
+  charge_box_id: string;
+  station_name?: string;
+  connector_id: number;
+  connector_type?: string;
+  status: 'finished' | 'charging' | 'error';
+  started_at: string; // ISO UTC with Z
+  stopped_at?: string | null; // ISO UTC with Z or null if ongoing
+  energy_kwh: number; // kWh for the session
+  total_br: number; // total amount in BRL
+  unit_price_br_per_kwh?: number | null; // BRL per kWh if available
+}
+
+export interface ProgressBatchItem {
+  transactionId: string;
+  progress: SessionTelemetryProgress | null;
+  error?: string;
+}

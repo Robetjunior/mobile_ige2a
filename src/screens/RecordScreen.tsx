@@ -1,352 +1,169 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  FlatList,
-  RefreshControl,
-  SafeAreaView,
-  Alert,
-  useColorScheme,
-} from 'react-native';
-
-// Store
-import { useRecordStore, useFormattedRecordData } from '../stores/recordStore';
-import { useUserStore } from '../stores/userStore';
-
-// Components
-import { PeriodTabs } from '../components/record/PeriodTabs';
-import { PeriodPicker } from '../components/record/PeriodPicker';
+import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { useRecordStore } from '../stores/recordStore';
+import AmountChart from '../components/charts/AmountChart';
+import { PeriodToggle } from '../components/record/PeriodToggle';
+// Removido: PeriodPicker
 import { InfoCards } from '../components/record/InfoCards';
-import { OrderItem } from '../components/record/OrderItem';
-import { EmptyState } from '../components/record/EmptyState';
-import { SkeletonList, SkeletonCards, SkeletonChart } from '../components/record/SkeletonList';
-import ErrorBoundary from '../components/ErrorBoundary';
-import { LOGGER } from '../lib/logger';
 
-// Types
-import { ChargingSessionItem, PeriodMode } from '../types';
+const ENERGY_COLOR = 'rgba(31,119,180,1)'; // azul
+const MONEY_COLOR = 'rgba(255,127,14,1)'; // laranja
 
-export const RecordScreen: React.FC = () => {
-  const {
-    periodMode,
-    ref,
-    summary,
-    sessions,
-    page,
-    total,
-    pageSize,
-    isLoading,
-    isLoadingMore,
-    error,
-    chartSummary,
-    setPeriodMode,
-    setRef,
-    loadSummary,
-    loadSessions,
-    loadMoreSessions,
-    refresh,
-    reset,
-    loadMockData,
-  } = useRecordStore();
+export default function RecordScreen() {
+  const recordStore = useRecordStore();
+  const { chartData, mode, loading, totals, error, metric } = recordStore;
 
-  // Formatting and status helpers (lives outside the store state)
-  const {
-    formatCurrency,
-    formatEnergy,
-    formatUnitPrice,
-    formatDuration,
-    getStatusColor,
-    getStatusLabel,
-  } = useFormattedRecordData();
+  // Carregamento inicial quando o modo mudar
+  React.useEffect(() => {
+    recordStore.loadChart().catch(() => {});
+  }, [mode]);
 
-  // PeriodPicker gerencia o próprio modal; não precisamos de estado local
+  const monthAbbr = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  const { preferences } = useUserStore();
-  const systemColorScheme = useColorScheme();
-  
-  // Determine if dark mode is active
-  const isDarkMode = preferences.theme === 'dark' || 
-    (preferences.theme === 'auto' && systemColorScheme === 'dark');
-  const [refreshing, setRefreshing] = useState(false);
-  const [ready, setReady] = useState(false);
+  const hasData = React.useMemo(() => {
+    const labelsOk = Array.isArray(chartData?.labels) && chartData.labels.length > 0;
+    const dsOk = Array.isArray(chartData?.datasets) && chartData.datasets.length > 0 && chartData.datasets[0].data.length > 0;
+    return labelsOk && dsOk;
+  }, [chartData]);
 
-  // Initialize data on mount
-  useEffect(() => {
-    LOGGER.UI.info('[RECORD] mounted');
-    loadInitialData();
-    const id = setTimeout(() => setReady(true), 0);
-    return () => clearTimeout(id);
-  }, []);
+  const allZero = React.useMemo(() => {
+    if (!hasData) return false;
+    const all = chartData!.datasets[0].data.every((v) => Number(v) === 0);
+    return all;
+  }, [hasData, chartData]);
 
-  // Reload data when period mode or reference changes
-  useEffect(() => {
-    if (ref) {
-      loadInitialData();
-    }
-  }, [periodMode, ref]);
-
-  const loadInitialData = useCallback(async () => {
-    try {
-      // For now, use mock data for charts demonstration
-      loadMockData();
-      
-      // TODO: Uncomment when ready to use real API
-      // const userId = 'user123'; // TODO: Get actual user ID
-      // await Promise.all([
-      //   loadSummary(userId),
-      //   loadSessions(userId, 1),
-      // ]);
-    } catch (err) {
-      LOGGER.UI.error('Error loading initial data:', err);
-      Alert.alert(
-        'Erro',
-        'Não foi possível carregar os dados. Verifique sua conexão e tente novamente.',
-        [{ text: 'OK' }]
-      );
-    }
-  }, [loadMockData]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await refresh('user123'); // TODO: Get actual user ID
-    } catch (err) {
-      LOGGER.UI.error('Error refreshing data:', err);
-      Alert.alert(
-        'Erro',
-        'Não foi possível atualizar os dados. Tente novamente.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refresh]);
-
-  // Calculate if there are more sessions to load
-  const hasMore = sessions.length < total;
-
-  // Load more sessions when reaching end
-  const handleLoadMore = useCallback(async () => {
-    if (!isLoadingMore && hasMore) {
-      try {
-        LOGGER.UI.info('record.pagination_load', { nextPage: page + 1 });
-        await loadMoreSessions('user123'); // TODO: Get actual user ID
-      } catch (err) {
-        LOGGER.UI.error('Error loading more sessions:', err);
+  const emptyChartData = React.useMemo(() => {
+    const now = new Date();
+    const count = mode === 'month' ? 5 : 5;
+    const labels: string[] = [];
+    if (mode === 'month') {
+      for (let i = count - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const abbr = monthAbbr[d.getMonth()];
+        labels.push(abbr);
+      }
+    } else {
+      for (let i = count - 1; i >= 0; i--) {
+        labels.push(String(now.getFullYear() - i));
       }
     }
-  }, [isLoadingMore, hasMore, loadMoreSessions, page]);
+    return { labels, datasets: [{ data: new Array(labels.length).fill(0) }] };
+  }, [mode]);
 
-  const handlePeriodModeChange = useCallback((mode: PeriodMode) => {
-    setPeriodMode(mode);
-  }, [setPeriodMode]);
-
-  const handlePeriodChange = useCallback((period: string) => {
-    setRef(period);
-    setShowPeriodPicker(false);
-  }, [setRef]);
-
-  const renderSessionItem = useCallback(({ item }: { item: ChargingSessionItem }) => (
-    <OrderItem 
-      session={item}
-      formatCurrency={formatCurrency}
-      formatEnergy={formatEnergy}
-      formatUnitPrice={formatUnitPrice}
-      formatDuration={formatDuration}
-      getStatusColor={getStatusColor}
-      getStatusLabel={getStatusLabel}
-    />
-  ), [formatCurrency, formatEnergy, formatUnitPrice, formatDuration, getStatusColor, getStatusLabel]);
-
-  const renderListFooter = useCallback(() => {
-    if (isLoadingMore && sessions.length > 0) {
-      return <SkeletonList count={3} />;
+  const displayData = React.useMemo(() => {
+    const base = !hasData || allZero ? emptyChartData : chartData!;
+    if (Array.isArray(base.datasets) && base.datasets.length > 0) {
+      let idx = 0;
+      if (metric === 'money' && base.datasets.length > 1) idx = 1;
+      const rawLabels = base.labels ?? [];
+      const dataset = base.datasets[idx] ?? { data: new Array(rawLabels.length).fill(0) };
+      const labels = mode === 'month'
+        ? rawLabels.map((lm) => {
+            const m = (() => { const mm = lm.split('-')[1]; const n = parseInt(mm, 10); return Number.isFinite(n) ? n : NaN; })();
+            if (!Number.isFinite(m)) return lm;
+            return monthAbbr[m - 1] ?? lm;
+          })
+        : rawLabels;
+      return { labels, datasets: [dataset] };
     }
-    return null;
-  }, [isLoadingMore, sessions.length]);
+    return base;
+  }, [chartData, emptyChartData, hasData, allZero, metric, mode]);
 
-  const renderListEmpty = useCallback(() => {
-    if (isLoading) {
-      return <SkeletonList count={5} />;
-    }
-    
-    if (error) {
-      return (
-        <EmptyState
-          title="Erro ao carregar dados"
-          message="Não foi possível carregar as sessões. Puxe para baixo para tentar novamente."
-          icon="alert-circle-outline"
-        />
-      );
-    }
+  const accentColor = metric === 'energy' ? ENERGY_COLOR : MONEY_COLOR;
+  const hasTwoSeries = Array.isArray(chartData?.datasets) && chartData.datasets.length > 1;
 
-    return (
-      <EmptyState
-        title="Nenhuma sessão encontrada"
-        message="Não há sessões de carregamento para o período selecionado."
-        icon="document-text-outline"
-      />
-    );
-  }, [isLoading, error]);
+  const onToggleMode = (m: 'month'|'year') => recordStore.setMode(m);
 
-  // Gráficos removidos da página /record conforme solicitado
+  // Header
+  const Header = (
+    <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF' }}>Registros</Text>
+    </View>
+  );
 
-  if (!ready) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={{ padding: 16 }}>
-          <Text>Iniciando… (modo: {periodMode})</Text>
-          <SkeletonChart />
-          <View style={{ height: 8 }} />
-          <SkeletonCards count={2} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Banner de erro
+  const ErrorBanner = error ? (
+    <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+      <View style={{ backgroundColor: '#FFE8E8', borderWidth: 1, borderColor: '#FFC9C9', borderRadius: 8, padding: 10 }}>
+        <Text style={{ color: '#C92A2A', fontWeight: '600' }}>Falha ao carregar</Text>
+        <Text style={{ color: '#C92A2A' }}>{String(error)}</Text>
+      </View>
+    </View>
+  ) : null;
+
+  // Skeleton simples
+  const Skeleton = (
+    <View style={{ padding: 16 }}>
+      <View style={{ height: 20, width: 120, backgroundColor: '#E9ECEF', borderRadius: 8, marginBottom: 12 }} />
+      <View style={{ height: 36, backgroundColor: '#E9ECEF', borderRadius: 8, marginBottom: 12 }} />
+      <View style={{ height: 240, backgroundColor: '#F1F3F5', borderRadius: 12 }} />
+      <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+        <View style={{ flex: 1, height: 80, backgroundColor: '#F1F3F5', borderRadius: 12 }} />
+        <View style={{ flex: 1, height: 80, backgroundColor: '#F1F3F5', borderRadius: 12 }} />
+        <View style={{ flex: 1, height: 80, backgroundColor: '#F1F3F5', borderRadius: 12 }} />
+      </View>
+    </View>
+  );
 
   return (
-    <ErrorBoundary>
-    <SafeAreaView style={styles.container}>
-      {/* Cabeçalho */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Registros</Text>
+    <View style={{ flex: 1, backgroundColor: '#343A40' }}>
+      {Header}
+
+      {/* Centraliza o filtro Mês/Ano */}
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <PeriodToggle mode={mode} onChange={onToggleMode} />
       </View>
 
-      
+      {ErrorBanner}
 
-      <FlatList
-        data={sessions}
-        renderItem={renderSessionItem}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#27AE60']}
-            tintColor="#27AE60"
-          />
-        }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.1}
-        ListFooterComponent={renderListFooter}
-        ListEmptyComponent={renderListEmpty}
-        ListHeaderComponent={
-          <View>
-            {/* Period Controls */}
-            <View style={styles.periodControls}>
-              <PeriodTabs
-                selectedMode={periodMode}
-                onModeChange={handlePeriodModeChange}
-              />
-              
-              <PeriodPicker
-                mode={periodMode}
-                selectedRef={ref}
-                onRefChange={handlePeriodChange}
-              />
+      {loading ? (
+        Skeleton
+      ) : (
+        <View style={{ padding: 16 }}>
+          {/* Card do gráfico */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#343a40' }}>Estatísticas de Valor</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <Chip label="Energia" active={metric === 'energy'} color={ENERGY_COLOR} onPress={() => recordStore.setMetric('energy')} />
+                <Chip label="Dinheiro" active={metric === 'money'} color={MONEY_COLOR} onPress={() => recordStore.setMetric('money')} disabled={!hasTwoSeries} />
+              </View>
             </View>
 
-            {/* Gráficos removidos */}
-
-            {/* Quadrantes de Informações */}
-            <View style={styles.cardsSection}>
-              {isLoading ? (
-                <SkeletonCards count={3} />
-              ) : (
-                <InfoCards
-                  totalMoney={chartSummary?.totalMoney || 0}
-                  totalKWh={chartSummary?.totalKWh || 0}
-                  totalMinutes={chartSummary?.totalMinutes || 0}
-                />
-              )}
+            <View style={{ paddingHorizontal: 8, paddingBottom: 12 }}>
+              <AmountChart data={displayData as any} mode={mode} isDarkMode={false} accentColor={accentColor} showValues={!allZero} />
             </View>
-
-            {/* Sessions List Header */}
-            <View style={styles.listHeader}>
-              <Text style={styles.listHeaderTitle}>Sessões de Carregamento</Text>
-              <Text style={styles.listHeaderSubtitle}>
-                {sessions.length > 0 ? `${sessions.length} sessões` : ''}
-              </Text>
-            </View>
+            {allZero && (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                <Text style={{ color: '#6C757D' }}>Sem recargas no período selecionado.</Text>
+              </View>
+            )}
           </View>
-        }
-        contentContainerStyle={sessions.length === 0 ? styles.emptyContainer : undefined}
-      />
 
-      {/* PeriodPicker já contém seu próprio Modal; nada extra aqui */}
-    </SafeAreaView>
-    </ErrorBoundary>
+          {/* Cards resumo */}
+          <View style={{ marginTop: 16 }}>
+            <InfoCards totalMoney={totals.amountBr} totalKWh={totals.energyKwh} totalMinutes={totals.minutes} isLoading={loading} />
+          </View>
+        </View>
+      )}
+    </View>
   );
-};
+}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#212529',
-  },
-  periodControls: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-  },
-  chartSection: {
-    marginVertical: 8,
-  },
-  cardsSection: {
-    marginVertical: 8,
-  },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-  },
-  listHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#212529',
-  },
-  listHeaderSubtitle: {
-    fontSize: 14,
-    color: '#6C757D',
-  },
-  modeProbe: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-  },
-  modeProbeText: {
-    fontSize: 12,
-    color: '#6C757D',
-  },
-  emptyContainer: {
-    flexGrow: 1,
-  },
-});
-
-export default RecordScreen;
+function Chip({ label, active, color, onPress, disabled }: { label: string; active: boolean; color: string; onPress: () => void; disabled?: boolean }) {
+  return (
+    <TouchableOpacity onPress={onPress} disabled={disabled} style={{
+      minHeight: 44,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 16,
+      borderWidth: active ? 0 : 1,
+      borderColor: '#dee2e6',
+      backgroundColor: active ? color : '#fff',
+      opacity: disabled ? 0.5 : 1,
+      justifyContent: 'center'
+    }}>
+      <Text style={{ color: active ? '#fff' : '#495057', fontWeight: '600', fontSize: 12 }}>{label}</Text>
+    </TouchableOpacity>
+  );
+}

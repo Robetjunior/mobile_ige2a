@@ -1,279 +1,129 @@
 import { create } from 'zustand';
-import { RecordState, PeriodMode, ChargingSessionItem, SessionSummary } from '../types';
 import { RecordService } from '../services/recordService';
-import { mockSummaryMonth, mockSummaryYear, mockSessionItems, MockSummary } from '../mocks/record';
-import { LOGGER } from '../lib/logger';
 
-interface RecordActions {
-  setPeriodMode: (mode: PeriodMode) => void;
+export type PeriodMode = 'month' | 'year';
+export type ChartKitData = { labels: string[]; datasets: { data: number[]; color?: (opacity: number) => string }[] };
+
+type CacheEntry = { data: ChartKitData; ts: number; totals?: { amountBr: number; energyKwh: number; minutes: number } };
+
+type RecordState = {
+  mode: PeriodMode;
+  metric: 'money' | 'energy';
+  ref: string; // 'YYYY-MM' quando mês, 'YYYY' quando ano
+  chartData: ChartKitData;
+  totals: { amountBr: number; energyKwh: number; minutes: number };
+  loading: boolean;
+  error?: string | null;
+  cache: {
+    month: { last5?: CacheEntry };
+    year: { last5?: CacheEntry };
+  };
+  setMode: (mode: PeriodMode) => void;
+  setMetric: (metric: 'money' | 'energy') => void;
   setRef: (ref: string) => void;
-  loadSummary: (userId: string) => Promise<void>;
-  loadSessions: (userId: string, page?: number) => Promise<void>;
-  loadMoreSessions: (userId: string) => Promise<void>;
-  refresh: (userId: string) => Promise<void>;
-  reset: () => void;
-  // Mock data methods
-  loadMockData: () => void;
-}
-
-interface RecordStoreState extends RecordState {
-  // Chart data from mocks
-  chartSummary: MockSummary | null;
-}
-
-type RecordStore = RecordStoreState & RecordActions;
-
-const initialState: RecordStoreState = {
-  periodMode: 'month',
-  ref: RecordService.getCurrentRef('month'),
-  summary: null,
-  sessions: [],
-  page: 1,
-  pageSize: 20,
-  total: 0,
-  isLoading: false,
-  isLoadingMore: false,
-  error: null,
-  chartSummary: mockSummaryMonth, // Initialize with month data
+  loadChart: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
-export const useRecordStore = create<RecordStore>((set, get) => ({
-  ...initialState,
+const FIVE_MIN = 5 * 60 * 1000;
+const EMPTY_DATA: ChartKitData = { labels: [], datasets: [] };
+let modeDebounceTimer: any = null;
 
-  setPeriodMode: (mode: PeriodMode) => {
-    const newRef = RecordService.getCurrentRef(mode);
-    const chartSummary = getMockSummaryForRef(mode, newRef);
-    LOGGER.STORE.info('setPeriodMode', { mode, newRef });
-    
-    set({ 
-      periodMode: mode, 
-      ref: newRef,
-      sessions: [],
-      page: 1,
-      total: 0,
-      summary: null,
-      chartSummary,
-    });
+export const useRecordStore = create<RecordState>((set, get) => ({
+  mode: 'month',
+  metric: 'money',
+  ref: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; })(),
+  chartData: EMPTY_DATA,
+  totals: { amountBr: 0, energyKwh: 0, minutes: 0 },
+  loading: true,
+  error: null,
+  cache: { month: {}, year: {} },
+
+  setMode: (mode) => {
+    const now = new Date();
+    const ref = mode === 'month' ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}` : String(now.getFullYear());
+    set({ mode, ref, loading: true });
+    if (modeDebounceTimer) clearTimeout(modeDebounceTimer);
+    modeDebounceTimer = setTimeout(() => {
+      get().loadChart().catch(() => {});
+    }, 300);
   },
 
-  setRef: (ref: string) => {
-    const { periodMode } = get();
-    set({ 
-      ref,
-      sessions: [],
-      page: 1,
-      total: 0,
-      summary: null,
-      chartSummary: getMockSummaryForRef(periodMode, ref),
-    });
+  setMetric: (metric) => {
+    set({ metric });
   },
 
-  loadSummary: async (userId: string) => {
-    const { periodMode, ref } = get();
-    
-    try {
-      set({ isLoading: true, error: null });
-      
-      const granularity = RecordService.getGranularity(periodMode);
-      const summary = await RecordService.retry(
-        () => RecordService.getSessionSummary(userId, granularity, ref),
-        3,
-        500
-      );
-      
-      set({ summary, isLoading: false });
-    } catch (error) {
-      LOGGER.STORE.error('Error loading summary:', error as any);
-      set({ 
-        error: error instanceof Error ? error.message : 'Erro ao carregar resumo',
-        isLoading: false 
-      });
-      LOGGER.STORE.warn('Using mock summary fallback');
-      get().loadMockData();
-    }
+  setRef: (ref) => {
+    set({ ref, loading: true });
+    get().loadChart().catch(() => {});
   },
 
-  loadSessions: async (userId: string, page = 1) => {
-    const { periodMode, ref, pageSize } = get();
-    
-    try {
-      set({ isLoading: page === 1, error: null });
-      
-      const { from, to } = RecordService.getDateRange(periodMode, ref);
-      const response = await RecordService.retry(
-        () => RecordService.getUserSessions(userId, from, to, page, pageSize),
-        3,
-        500
-      );
-      
-      set({ 
-        sessions: page === 1 ? response.items : [...get().sessions, ...response.items],
-        page: response.page,
-        total: response.total,
-        isLoading: false,
-        isLoadingMore: false,
-      });
-    } catch (error) {
-      LOGGER.STORE.error('Error loading sessions:', error as any);
-      set({ 
-        error: error instanceof Error ? error.message : 'Erro ao carregar sessões',
-        isLoading: false,
-        isLoadingMore: false,
-      });
-      LOGGER.STORE.warn('Using mock sessions fallback');
-      get().loadMockData();
-    }
-  },
+  loadChart: async () => {
+    const now = new Date();
+    const { mode, cache, ref } = get();
+    const cacheKey = 'last5';
+    const bucket = mode === 'month' ? cache.month : cache.year;
+    const cached = (bucket as any)[cacheKey] as CacheEntry | undefined;
 
-  loadMoreSessions: async (userId: string) => {
-    const { page, total, sessions, pageSize, isLoadingMore } = get();
-    
-    // Check if there are more items to load
-    if (sessions.length >= total || isLoadingMore) {
+    if (cached && now.getTime() - cached.ts < FIVE_MIN) {
+      set({ chartData: cached.data, loading: false, error: null });
+      if (cached.totals) {
+        set({ totals: cached.totals });
+      } else {
+        const totalsRaw = await RecordService.fetchTotalsForRef(ref, mode);
+        const totals = {
+          amountBr: totalsRaw.totalBr,
+          energyKwh: totalsRaw.totalKwh,
+          minutes: totalsRaw.totalMinutes,
+        };
+        const entry: CacheEntry = { ...cached, totals };
+        if (mode === 'month') {
+          set((s) => ({ cache: { ...s.cache, month: { last5: entry } } }));
+        } else {
+          set((s) => ({ cache: { ...s.cache, year: { last5: entry } } }));
+        }
+        set({ totals });
+      }
       return;
     }
-    
+
+    set({ loading: true, error: null });
     try {
-      set({ isLoadingMore: true });
-      await get().loadSessions(userId, page + 1);
-    } catch (error) {
-      set({ isLoadingMore: false });
+      let chartData: ChartKitData;
+      if (mode === 'month') {
+        const raw = await RecordService.fetchMonthlyTotals12UsingTotalsEndpoint(12);
+        const last5Labels = raw.labels.slice(-5);
+        const labels = last5Labels.map((lm) => {
+          const mStr = lm.split('-')[1];
+          const mNum = parseInt(mStr, 10);
+          return Number.isFinite(mNum) ? (RecordService.monthAbbrPtBR[mNum - 1] || lm) : lm;
+        });
+        const energy = (raw.datasets[0]?.data || []).slice(-5);
+        const total = (raw.datasets[1]?.data || []).slice(-5);
+        chartData = { labels, datasets: [{ data: energy }, { data: total }] };
+      } else {
+        chartData = await RecordService.fetchYearlyTotalsLast5UsingTotalsEndpoint();
+      }
+      const totalsRaw = await RecordService.fetchTotalsForRef(ref, mode);
+      const totals = {
+        amountBr: totalsRaw.totalBr,
+        energyKwh: totalsRaw.totalKwh,
+        minutes: totalsRaw.totalMinutes,
+      };
+      const entry: CacheEntry = { data: chartData, ts: now.getTime(), totals };
+      if (mode === 'month') {
+        set((s) => ({ cache: { ...s.cache, month: { last5: entry } } }));
+      } else {
+        set((s) => ({ cache: { ...s.cache, year: { last5: entry } } }));
+      }
+      set({ chartData, totals, loading: false, error: null });
+    } catch (err: any) {
+      set({ loading: false, error: err?.message ?? 'Erro ao carregar gráfico' });
     }
   },
 
-  refresh: async (userId: string) => {
-    const state = get();
-    
-    // Reset pagination
-    set({ 
-      sessions: [], 
-      page: 1, 
-      total: 0,
-      error: null,
-    });
-    LOGGER.STORE.info('refresh');
-    
-    // Load both summary and first page of sessions
-    await Promise.all([
-      state.loadSummary(userId),
-      state.loadSessions(userId, 1),
-    ]);
-  },
-
-  reset: () => {
-    set(initialState);
-  },
-
-  loadMockData: () => {
-    const { periodMode, ref } = get();
-    const chartSummary = getMockSummaryForRef(periodMode, ref);
-    
-    // Simulate loading state
-    set({ isLoading: true });
-    
-    setTimeout(() => {
-      set({
-        chartSummary,
-        sessions: mockSessionItems,
-        total: mockSessionItems.length,
-        page: 1,
-        isLoading: false,
-        error: null,
-      });
-    }, 500); // Simulate network delay
+  refresh: async () => {
+    set((s) => ({ cache: { month: {}, year: {} }, loading: true }));
+    await get().loadChart();
   },
 }));
-
-// Adapt mock data to the selected ref so charts react to date
-const getMockSummaryForRef = (mode: PeriodMode, ref: string): MockSummary => {
-  if (mode === 'month') {
-    // ref: YYYY-MM; remap x from 'MM-DD' to selected month
-    const [, month] = ref.split('-');
-    const monthLabel = month ?? '01';
-    const base = mockSummaryMonth;
-    return {
-      ...base,
-      period: ref,
-      amountSeries: base.amountSeries.map(it => ({
-        x: `${monthLabel}-${it.x.split('-')[1]}`,
-        y: it.y,
-      })),
-      sessionsSeries: base.sessionsSeries.map(it => ({
-        x: `${monthLabel}-${it.x.split('-')[1]}`,
-        count: it.count,
-        kWh: it.kWh,
-      })),
-    };
-  }
-  // Year mode: keep series x as '01'..'12', set period to year
-  const base = mockSummaryYear;
-  return {
-    ...base,
-    period: ref,
-  };
-};
-
-// Helper hook for formatted data
-export const useFormattedRecordData = () => {
-  const store = useRecordStore();
-  
-  const formatDuration = (minutes: number): string => {
-    if (minutes < 60) {
-      return `${minutes}min`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}min` : `${hours}h`;
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(amount);
-  };
-
-  const formatEnergy = (kWh: number): string => {
-    return `${kWh.toFixed(1)} kWh`;
-  };
-
-  const formatUnitPrice = (price: number): string => {
-    return `${formatCurrency(price)}/kWh`;
-  };
-
-  const getStatusColor = (status: ChargingSessionItem['status']): string => {
-    switch (status) {
-      case 'finished':
-        return '#27AE60'; // Green
-      case 'charging':
-        return '#F39C12'; // Orange
-      case 'error':
-        return '#E74C3C'; // Red
-      default:
-        return '#95A5A6'; // Gray
-    }
-  };
-
-  const getStatusLabel = (status: ChargingSessionItem['status']): string => {
-    switch (status) {
-      case 'finished':
-        return 'Finalizado';
-      case 'charging':
-        return 'Carregando';
-      case 'error':
-        return 'Erro';
-      default:
-        return 'Desconhecido';
-    }
-  };
-
-  return {
-    ...store,
-    formatDuration,
-    formatCurrency,
-    formatEnergy,
-    formatUnitPrice,
-    getStatusColor,
-    getStatusLabel,
-  };
-};
