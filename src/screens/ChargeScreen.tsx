@@ -7,7 +7,9 @@ import CircularGauge from '../components/CircularGauge';
 import PrimaryCTA from '../components/PrimaryCTA';
 import MetricCard from '../components/MetricCard';
 import SessionInfoAccordion from '../components/SessionInfoAccordion';
+import RealTimeMetrics from '../components/RealTimeMetrics';
 import { useChargerState } from '../hooks/useChargerState';
+import { useSessionTelemetry } from '../hooks/useSessionTelemetry';
 import type { OnlineChargerItem } from '../types';
 import { COLORS, SIZES } from '../constants';
 import ProgressRing from '../components/ProgressRing';
@@ -39,6 +41,13 @@ export default function ChargeScreen() {
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
 const cs = useChargerState(chargeBoxId || '');
+
+  // Real-time telemetry polling
+  const telemetry = useSessionTelemetry({
+    chargeBoxId,
+    pollingInterval: 3000, // 3 seconds
+    enabled: Boolean(chargeBoxId)
+  });
 
   useEffect(() => {
     const fromParams = route?.params?.chargeBoxId || null;
@@ -189,14 +198,17 @@ const cs = useChargerState(chargeBoxId || '');
     return String(val);
   };
 
-  // Progresso e ETA (mock inicial, preparado para dados reais)
+  // Progresso e ETA - usa dados de telemetria em tempo real quando disponível
   const targetKWh = useMemo(() => {
     const envTarget = Number((process as any)?.env?.EXPO_PUBLIC_CHARGE_TARGET_KWH || 0);
     return envTarget > 0 ? envTarget : 20;
   }, []);
-  const energyKWh = currentSession?.energyKWh ?? 0;
-  const powerKw = currentSession?.powerKw ?? (details?.powerKw ?? 7);
+  
+  // Prioriza dados de telemetria em tempo real
+  const energyKWh = telemetry.progress?.kwh ?? currentSession?.energyKWh ?? 0;
+  const powerKw = telemetry.progress?.power_kw ?? currentSession?.powerKw ?? (details?.powerKw ?? 7);
   const progressPct = Math.max(0, Math.min(1, targetKWh > 0 ? energyKWh / targetKWh : 0));
+  
   const etaMin = useMemo(() => {
     if (!powerKw || powerKw <= 0) return null;
     const remaining = Math.max(0, targetKWh - energyKWh);
@@ -310,12 +322,20 @@ const cs = useChargerState(chargeBoxId || '');
       </View>
 
 
-      {/* KPIs principais */}
-      <View style={styles.kpiGridRow}>
-        <MetricCard title="Potência" value={String(Math.round(cs.metrics.powerKw))} unit="kW" />
-        <MetricCard title="Duração" value={`${Math.max(0, Math.floor(cs.metrics.durationMin))} min`} />
-        <MetricCard title="Valor Total" value={(() => { const v = cs.metrics.totalAmount || 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })()} />
-      </View>
+      {/* Real-time telemetry metrics */}
+      <RealTimeMetrics 
+        progress={telemetry.progress} 
+        isPolling={telemetry.isPolling} 
+      />
+
+      {/* KPIs principais - fallback quando não há telemetria */}
+      {!telemetry.progress && (
+        <View style={styles.kpiGridRow}>
+          <MetricCard title="Potência" value={String(Math.round(cs.metrics.powerKw))} unit="kW" />
+          <MetricCard title="Duração" value={`${Math.max(0, Math.floor(cs.metrics.durationMin))} min`} />
+          <MetricCard title="Valor Total" value={(() => { const v = cs.metrics.totalAmount || 0; try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); } catch { return `R$ ${v.toFixed(2)}`; } })()} />
+        </View>
+      )}
 
       {/* KPIs secundários */}
       <View style={styles.kpiGridWrap}>

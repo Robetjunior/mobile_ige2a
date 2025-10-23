@@ -180,3 +180,32 @@ export interface OnlineChargerListResponse {
   items: OnlineChargerItem[];
   count: number;
 }
+
+// Session telemetry types for real-time data
+export interface ActiveSessionResponse {
+  transactionId: string;
+  chargeBoxId: string;
+  connectorId: number;
+  idTag: string;
+  startedAt: string;
+  duration_seconds: number;
+  status: 'active' | 'preparing' | 'charging' | 'finishing';
+}
+
+export interface SessionTelemetryProgress {
+  kwh: number;
+  duration_seconds: number;
+  started_at: string;
+  soc_percent_at?: number;
+  power_kw?: number;
+  voltage_v?: number;
+  current_a?: number;
+  temperature_c?: number;
+}
+
+export interface SessionTelemetryState {
+  activeSession: ActiveSessionResponse | null;
+  progress: SessionTelemetryProgress | null;
+  isPolling: boolean;
+  error: string | null;
+}
