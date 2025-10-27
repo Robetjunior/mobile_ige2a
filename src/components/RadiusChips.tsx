@@ -31,13 +31,23 @@ export default function RadiusChips({ value, onChange }: RadiusChipsProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'center', gap: 8 as any, paddingTop: 6, paddingBottom: 8 },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16 as any,
+    marginTop: 8,
+    paddingBottom: 8,
+    flexWrap: 'nowrap',
+    width: '100%',
+  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    justifyContent: 'center',
+    minWidth: 92,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.textLight,
     backgroundColor: 'transparent',

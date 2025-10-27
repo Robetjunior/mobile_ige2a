@@ -4,6 +4,8 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants';
@@ -16,6 +18,8 @@ interface SearchBarProps {
   onRightPress?: () => void; // preferred prop for right button
   rightIconName?: keyof typeof Ionicons.glyphMap; // default 'options'
   onRightPressWithAnchor?: (anchor: { x: number; y: number; width: number; height: number }) => void;
+  containerStyle?: StyleProp<ViewStyle>;
+  variant?: 'default' | 'header';
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
@@ -26,6 +30,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onRightPress,
   rightIconName = 'options',
   onRightPressWithAnchor,
+  containerStyle,
+  variant = 'default',
 }) => {
   const rightRef = useRef<TouchableOpacity | null>(null);
 
@@ -42,13 +48,15 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     fn && fn();
   };
 
+  const isHeader = variant === 'header';
+
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
+    <View style={[styles.container, containerStyle] }>
+      <View style={[styles.searchContainer, isHeader && styles.searchContainerHeader] }>
         <Ionicons 
           name="search" 
           size={20} 
-          color={COLORS.gray} 
+          color={isHeader ? 'rgba(255,255,255,0.7)' : COLORS.gray} 
           style={styles.searchIcon} 
         />
         <TextInput
@@ -56,28 +64,30 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.gray}
+          placeholderTextColor={isHeader ? 'rgba(255,255,255,0.7)' : COLORS.gray}
+          selectionColor={isHeader ? '#FFFFFF' : undefined}
+          underlineColorAndroid="transparent"
         />
         {value.length > 0 && (
           <TouchableOpacity
             onPress={() => onChangeText('')}
             style={styles.clearButton}
           >
-            <Ionicons name="close-circle" size={20} color={COLORS.gray} />
+            <Ionicons name="close-circle" size={20} color={isHeader ? 'rgba(255,255,255,0.7)' : COLORS.gray} />
+          </TouchableOpacity>
+        )}
+
+        {(onRightPress || onFilterPress || onRightPressWithAnchor) && (
+          <TouchableOpacity
+            ref={rightRef as any}
+            style={styles.rightIconInside}
+            onPress={handleRightPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name={rightIconName as any} size={20} color={isHeader ? '#FFFFFF' : COLORS.primary} />
           </TouchableOpacity>
         )}
       </View>
-      
-      {(onRightPress || onFilterPress || onRightPressWithAnchor) && (
-        <TouchableOpacity
-          ref={rightRef as any}
-          style={styles.filterButton}
-          onPress={handleRightPress}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name={rightIconName as any} size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-      )}
     </View>
   );
 };
@@ -86,8 +96,8 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SIZES.md,
-    paddingVertical: SIZES.sm,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
     backgroundColor: 'transparent',
   },
   searchContainer: {
@@ -95,27 +105,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: SIZES.radiusMD,
+    borderRadius: 24,
     paddingHorizontal: SIZES.sm,
-    marginRight: SIZES.sm,
+    marginRight: 0,
+    minHeight: 46,
+  },
+  searchContainerHeader: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   searchIcon: {
     marginRight: SIZES.sm,
   },
   input: {
     flex: 1,
-    height: 40,
+    height: 46,
     fontSize: SIZES.fontSM,
     color: COLORS.textPrimary,
   },
   clearButton: {
     padding: 4,
   },
-  filterButton: {
+  rightIconInside: {
     width: 44,
     height: 44,
-    borderRadius: SIZES.radiusMD,
-    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },

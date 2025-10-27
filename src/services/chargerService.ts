@@ -52,7 +52,8 @@ interface OcppOnlineResponse {
 export class ChargerService {
   static buildGetOptions(): RequestInit {
     const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
-    const publicHeaders: Record<string, string> = { 'Cache-Control': 'no-cache', 'X-API-Key': API_KEY };
+    const publicHeaders: Record<string, string> = { 'X-API-Key': API_KEY, 'Accept': 'application/json' };
+    if (!isWeb) publicHeaders['Cache-Control'] = 'no-cache';
     const opts: RequestInit = { method: 'GET', headers: publicHeaders };
     if (isWeb) (opts as any).mode = 'cors';
     return opts;
@@ -173,22 +174,37 @@ export class ChargerService {
 
   static async getOnlineChargers(): Promise<Station[]> {
     this.ensureConfig();
-    const url = `${API_BASE}/v1/chargers/online`;
-    try {
-      LOGGER.API.info('GET /v1/chargers/online', { baseUrl: API_BASE });
-      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} ${text}`);
-      }
-      const raw = await res.json();
-      const list: ChargerDto[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
-      LOGGER.API.debug('Online chargers fetched', { count: list?.length ?? 0 });
-      return list.map(this.mapDtoToStation);
-    } catch (err) {
-      LOGGER.API.error('getOnlineChargers failed', err);
-      throw err;
+    const baseUrl = `${API_BASE}/v1/chargers/online`;
+    const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
+    const devHost = isWeb ? (window.location?.hostname || '') : '';
+    const candidates: string[] = [baseUrl];
+    if (isWeb && ['localhost', '127.0.0.1', '0.0.0.0'].includes(devHost)) {
+      candidates.push('http://localhost:3000/v1/chargers/online', 'http://127.0.0.1:3000/v1/chargers/online');
     }
+    const attempts = 3;
+    let lastErr: any = null;
+    for (const url of candidates) {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          LOGGER.API.info('GET /v1/chargers/online', { url, attempt: i + 1 });
+          const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions(), 15000);
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status} ${text}`);
+          }
+          const raw = await res.json().catch(() => null);
+          const list: ChargerDto[] = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
+          return list.map(this.mapDtoToStation);
+        } catch (e: any) {
+          lastErr = e;
+          const isAbort = (e?.name === 'AbortError') || /aborted/i.test(String(e?.message || e));
+          LOGGER.API.warn('getOnlineChargers attempt failed', { url, attempt: i + 1, err: String(e?.message || e), abort: isAbort });
+          await new Promise((r) => setTimeout(r, 350));
+        }
+      }
+    }
+    LOGGER.API.warn('getOnlineChargers failed after retries; returning empty list', { err: String(lastErr?.message || lastErr) });
+    return [];
   }
 
   static async getOnlineChargersRecent(sinceMinutes = 60, limit = 200): Promise<Station[]> {
@@ -270,29 +286,47 @@ export class ChargerService {
   }
 
   static async getChargerDetails(chargeBoxId: string): Promise<Station> {
-    const url = `${API_BASE}/v1/chargers/${encodeURIComponent(chargeBoxId)}`;
-    try {
-      LOGGER.API.info('GET /v1/chargers/:id', { baseUrl: API_BASE, chargeBoxId });
-      const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions());
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} ${text}`);
-      }
-      const dto: any = await res.json();
-      const base = this.mapDtoToStation(dto) as any;
-      // Enrich with detail fields used by ChargeScreen/useChargerState
-      base.chargeBoxId = dto.chargeBoxId || base.id;
-      base.lastStatus = dto.lastStatus || dto.status || null;
-      base.lastTransactionId = dto.lastTransactionId ?? null;
-      base.wsOnline = dto.wsOnline ?? undefined;
-      base.connectors = Array.isArray(dto.connectors)
-        ? dto.connectors.map((c: any) => ({ connectorId: c.connectorId ?? c.id ?? c.connector_id, status: c.status }))
-        : (Array.isArray(base.connectors) ? base.connectors : []);
-      return base as Station;
-    } catch (err) {
-      LOGGER.API.error('getChargerDetails failed', err);
-      throw err;
+    const baseUrl = `${API_BASE}/v1/chargers/${encodeURIComponent(chargeBoxId)}`;
+    const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
+    const devHost = isWeb ? (window.location?.hostname || '') : '';
+    const candidates: string[] = [baseUrl];
+    if (isWeb && ['localhost', '127.0.0.1', '0.0.0.0'].includes(devHost)) {
+      candidates.push(
+        `http://localhost:3000/v1/chargers/${encodeURIComponent(chargeBoxId)}`,
+        `http://127.0.0.1:3000/v1/chargers/${encodeURIComponent(chargeBoxId)}`
+      );
     }
+    const attempts = 3;
+    let lastErr: any = null;
+    for (const url of candidates) {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          LOGGER.API.info('GET /v1/chargers/:id', { url, attempt: i + 1, chargeBoxId });
+          const res = await this.fetchWithTimeout(url, ChargerService.buildGetOptions(), 15000);
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status} ${text}`);
+          }
+          const dto: any = await res.json().catch(() => null);
+          const base = this.mapDtoToStation(dto) as any;
+          base.chargeBoxId = dto?.chargeBoxId || base.id;
+          base.lastStatus = dto?.lastStatus || dto?.status || null;
+          base.lastTransactionId = dto?.lastTransactionId ?? null;
+          base.wsOnline = dto?.wsOnline ?? undefined;
+          base.connectors = Array.isArray(dto?.connectors)
+            ? dto.connectors.map((c: any) => ({ connectorId: c.connectorId ?? c.id ?? c.connector_id, status: c.status }))
+            : (Array.isArray(base.connectors) ? base.connectors : []);
+          return base as Station;
+        } catch (e: any) {
+          lastErr = e;
+          const isAbort = (e?.name === 'AbortError') || /aborted/i.test(String(e?.message || e));
+          LOGGER.API.warn('getChargerDetails attempt failed', { url, attempt: i + 1, err: String(e?.message || e), abort: isAbort });
+          await new Promise((r) => setTimeout(r, 350));
+        }
+      }
+    }
+    LOGGER.API.error('getChargerDetails failed', lastErr);
+    throw lastErr || new Error('getChargerDetails failed');
   }
 
   static async startBilling(body: StartBillingBody) {

@@ -46,8 +46,8 @@ export const StationDetailScreen = () => {
 
   useEffect(() => {
     loadStationDetails();
-    // Atualiza últimos 10 logs quando carregando detalhes
-    setLogs(LOGGER.getBuffer().slice(-5));
+    // Atualiza últimos 7 logs quando carregando detalhes
+    setLogs(LOGGER.getBuffer().slice(-7));
   }, [stationId]);
 
   const loadStationDetails = async () => {
@@ -187,7 +187,7 @@ export const StationDetailScreen = () => {
         />
         <View style={styles.logsPanel}
 >
-          <Text style={styles.logsTitle}>Logs recentes (5)</Text>
+          <Text style={styles.logsTitle}>Logs recentes (7)</Text>
           {logs.map((line, idx) => (
             <Text key={idx} style={styles.logLine}>{line}</Text>
           ))}
@@ -204,7 +204,7 @@ export const StationDetailScreen = () => {
               } catch {}
             }}
           >
-            <Text style={styles.copyButtonText}>Copiar 5 logs</Text>
+            <Text style={styles.copyButtonText}>Copiar 7 logs</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
