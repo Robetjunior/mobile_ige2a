@@ -30,6 +30,7 @@ import { ErrorMessage } from '../components/ErrorMessage';
 import { MapComponent } from '../components/MapComponent';
 import HomeMap from '../components/HomeMap';
 import { SearchBar } from '../components/SearchBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
 import { useStationStore } from '../stores/stationStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -58,6 +59,7 @@ const MAP_HEIGHT = SCREEN_HEIGHT * 0.6;
 const LIST_HEIGHT = Platform.OS === 'web' ? SCREEN_HEIGHT * 0.7 : SCREEN_HEIGHT * 0.45;
 
 export const HomeScreen = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const mapRef = useRef<MapView>(null);
   // Inicia expandida no web para garantir visibilidade imediata
@@ -424,8 +426,8 @@ export const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Header overlay com Search + filtros (Wow Charger style) */}
-      <View style={styles.headerOverlay}>
+      {/* Header fixo (Wow Charger style) - sem position absolute */}
+      <View style={[styles.headerOverlay, { paddingTop: insets.top + 8, height: insets.top + 168, zIndex: 5 }] }>
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -436,20 +438,22 @@ export const HomeScreen = () => {
           }}
           onRightPressWithAnchor={async (anchor) => { if (menuEnabledV2) { openHomeMenu(anchor); } else { await loadRecents(); setRecentsVisible(true); } }}
           rightIconName={'menu'}
+          containerStyle={{ alignSelf: 'center', width: '88%' }}
+          variant={'header'}
         />
         <View style={styles.filtersSection}>
           <View style={styles.filtersHeaderRow}>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setFiltersVisible(true)} style={styles.filtersHeaderLeft}>
-              <Ionicons name="funnel" size={16} color={'#D5D8DC'} />
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setFiltersVisible(true)} style={styles.filtersHeaderLeft}>
+              <Ionicons name="funnel" size={18} color={'rgba(255,255,255,0.9)'} />
               <Text style={styles.filtersHeaderText}>Filtro</Text>
             </TouchableOpacity>
             <View style={styles.filtersDivider} />
             <TouchableOpacity
-              activeOpacity={0.7}
+              activeOpacity={0.9}
               onPress={() => setFavoritesOnly(!favoritesOnly)}
               style={styles.filtersHeaderRight}
             >
-              <Ionicons name={favoritesOnly ? 'star' : 'star-outline'} size={16} color={'#D5D8DC'} />
+              <Ionicons name={favoritesOnly ? 'star' : 'star-outline'} size={18} color={'rgba(255,255,255,0.9)'} />
               <Text style={styles.filtersHeaderText}>Favoritos</Text>
             </TouchableOpacity>
           </View>
@@ -470,17 +474,18 @@ export const HomeScreen = () => {
         </View>
       )}
 
+      {/* Map container with absolute fill */}
       <View style={styles.mapContainer}>
         {Platform.OS === 'web' ? (
-          <View style={styles.map}>
-            <HomeMap
-              stations={displayedStations}
-              onMarkerPress={handleMarkerPress}
-              getMarkerColor={getMarkerColor}
-            />
-          </View>
+          <HomeMap
+            style={StyleSheet.absoluteFillObject}
+            stations={displayedStations}
+            onMarkerPress={handleMarkerPress}
+            getMarkerColor={getMarkerColor}
+          />
         ) : (
           <MapComponent
+            style={StyleSheet.absoluteFillObject}
             mapRef={mapRef}
             mapRegion={mapRegion}
             onRegionChangeComplete={handleRegionChange}
@@ -491,26 +496,18 @@ export const HomeScreen = () => {
           />
         )}
 
+        {/* GPS recenter button - moved to right and raised for visibility */}
         <TouchableOpacity
-          style={styles.recenterButton}
+          style={[
+            styles.recenterButton,
+            { bottom: Math.max(insets.bottom, 0) + 112 }
+          ]}
           onPress={handleRecenterPress}
           activeOpacity={0.85}
         >
           <Ionicons name="locate" size={28} color={COLORS.primary} />
         </TouchableOpacity>
-        {/* QR scanner FAB */}
-        <TouchableOpacity
-          style={styles.qrFab}
-          onPress={() => {
-            try {
-              // @ts-ignore
-              navigation.navigate('QRScanner');
-            } catch {}
-          }}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="qr-code" size={24} color={COLORS.white} />
-        </TouchableOpacity>
+
         {/* Bottom sheet sobre o mapa */}
         <Animated.View style={[styles.listContainer, { height: listHeight }]}>
           <TouchableOpacity
@@ -628,11 +625,14 @@ export const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    alignItems: 'stretch',
+    backgroundColor: '#3B424A',
   },
   mapContainer: {
     flex: 1,
     position: 'relative',
+    backgroundColor: '#000',
+    zIndex: 0,
   },
   map: {
     flex: 1,
@@ -665,111 +665,63 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? 84 : 24,
-    left: '50%',
-    marginLeft: -28,
+    right: 24, // Bottom right corner
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.background,
+    borderRadius: 9999,
+    backgroundColor: '#FFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.textPrimary,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-    zIndex: 5,
-  },
-  qrFab: {
-    position: 'absolute',
-    bottom: Platform.OS === 'web' ? 84 : 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.textPrimary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-    zIndex: 6,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    zIndex: 20,
   },
   headerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: Platform.OS === 'ios' ? 20 : 8,
     paddingBottom: 8,
-    backgroundColor: '#3D3F45',
-    zIndex: 6,
+    paddingHorizontal: 16,
+    backgroundColor: '#3B424A',
+    zIndex: 5,
   },
   filtersSection: {
-    paddingHorizontal: SIZES.md,
-    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   filtersHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
+    justifyContent: 'center',
+    gap: 24 as any,
+    width: '100%',
+    marginTop: 6,
   },
   filtersHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6 as any,
+    justifyContent: 'center',
+    gap: 8 as any,
+    minWidth: 120,
+    height: 36,
   },
   filtersHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6 as any,
+    justifyContent: 'center',
+    gap: 8 as any,
+    minWidth: 120,
+    height: 36,
   },
   filtersHeaderText: {
-    color: '#D5D8DC',
-    fontSize: SIZES.fontSM,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 20,
     fontWeight: '600',
   },
   filtersDivider: {
-    height: 16,
+    height: 22,
     width: 1,
-    backgroundColor: '#D5D8DC',
-    opacity: 0.6,
-  },
-  distanceRow: {
-    flexDirection: 'row',
-    gap: 8 as any,
-    paddingTop: 6,
-    paddingBottom: 8,
-  },
-  distanceChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.textLight,
-    backgroundColor: 'transparent',
-  },
-  distanceChipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  distanceChipText: {
-    marginLeft: 6,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-    fontSize: SIZES.fontSM,
-  },
-  distanceChipTextActive: {
-    color: COLORS.background,
+    backgroundColor: 'rgba(255,255,255,1)',
+    opacity: 0.5,
   },
   listContainer: {
     position: 'absolute',
