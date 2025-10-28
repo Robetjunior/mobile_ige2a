@@ -32,6 +32,7 @@ import HomeMap from '../components/HomeMap';
 import { SearchBar } from '../components/SearchBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
+import { useLocationStore } from '../stores/locationStore';
 import { useStationStore } from '../stores/stationStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { Station, DistanceFilter, OnlineChargerItem } from '../types';
@@ -130,22 +131,39 @@ export const HomeScreen = () => {
       await loadOnlineFavs();
       await loadOnlineStatusList();
       
-      // Update map region
+      // Atualiza região do mapa com fallback para Lapa-SP quando não houver localização
+      const fallbackLat = -23.5231248;
+      const fallbackLon = -46.7073544;
       const newRegion = {
         ...mapRegion,
-        latitude: location.latitude,
-        longitude: location.longitude,
+        latitude: typeof location?.latitude === 'number' ? location.latitude : fallbackLat,
+        longitude: typeof location?.longitude === 'number' ? location.longitude : fallbackLon,
       };
       setMapRegion(newRegion);
       
-      // Request location permission in background
+      // Request location permission in background e carregar próximos
+      let lat = typeof location?.latitude === 'number' ? location.latitude : fallbackLat;
+      let lon = typeof location?.longitude === 'number' ? location.longitude : fallbackLon;
+      let radius = distanceFilter as DistanceFilter;
+
       if (!hasPermission) {
         const granted = await requestPermission();
         if (granted) {
           // Atualiza localização (mapa) e recarrega lista
           await getCurrentLocation();
           await loadOnlineStatusList();
+          // Leitura atualizada após getCurrentLocation
+          const { latitude: latNow, longitude: lonNow } = useLocationStore.getState();
+          lat = typeof latNow === 'number' ? latNow : lat;
+          lon = typeof lonNow === 'number' ? lonNow : lon;
         }
+      }
+
+      // Carrega postos próximos mesmo sem permissão, usando fallback
+      try {
+        await loadNearbyStations(lat, lon, radius);
+      } catch (e) {
+        // fallback silencioso para lista online já carregada
       }
     } catch (error) {
       console.error('Error initializing screen:', error);
@@ -159,7 +177,26 @@ export const HomeScreen = () => {
     try {
       let stations: Station[] = [];
       try {
-        stations = await ChargerService.getChargers(lat, lng, radiusKm);
+        // Ajusta limit conforme raio para evitar muita carga
+        let limit: number | undefined = undefined;
+        if (typeof radiusKm === 'number') {
+          if (radiusKm <= 100) limit = 100;
+          else if (radiusKm <= 300) limit = 200;
+          else if (radiusKm <= 500) limit = 200;
+        }
+        if (typeof lat === 'number' && typeof lng === 'number' && typeof radiusKm === 'number') {
+          stations = await ChargerService.getNearbyChargersEnriched(lat, lng, radiusKm, limit);
+          // Fallback: se 100 km não retornou nenhum, tente 300 km para garantir marcadores
+          if ((stations?.length ?? 0) === 0 && radiusKm === 100) {
+            try {
+              stations = await ChargerService.getNearbyChargersEnriched(lat, lng, 300, 200);
+              await setDistanceFilter(300 as DistanceFilter);
+            } catch {}
+          }
+        } else {
+          // Sem localização válida, cai para lista online
+          stations = await ChargerService.getOnlineChargers();
+        }
       } catch (e) {
         // fallback: only online list if general fails
         stations = await ChargerService.getOnlineChargers();
@@ -171,6 +208,16 @@ export const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Ao tocar nos chips de raio, além de persistir, dispara busca próxima ao usuário
+  const handleRadiusChange = async (d: DistanceFilter) => {
+    await setDistanceFilter(d);
+    const fallbackLat = -23.5231248;
+    const fallbackLon = -46.7073544;
+    const lat = typeof location?.latitude === 'number' ? location.latitude : fallbackLat;
+    const lon = typeof location?.longitude === 'number' ? location.longitude : fallbackLon;
+    await loadNearbyStations(lat, lon, d);
   };
 
   const loadOnlineNowStations = async () => {
@@ -457,8 +504,8 @@ export const HomeScreen = () => {
               <Text style={styles.filtersHeaderText}>Favoritos</Text>
             </TouchableOpacity>
           </View>
-          {/* Radius chips */}
-          <RadiusChips value={distanceFilter as DistanceFilter} onChange={(d) => setDistanceFilter(d)} />
+          {/* Radius chips: dispara busca próxima com lat/lon do usuário */}
+          <RadiusChips value={distanceFilter as DistanceFilter} onChange={handleRadiusChange} />
         </View>
       </View>
       <HomeMenuSheet />
@@ -466,7 +513,7 @@ export const HomeScreen = () => {
         <View style={styles.permissionBanner}>
           <Ionicons name="location-outline" size={16} color={COLORS.gray} />
           <Text style={styles.permissionText}>
-            Para precisão, permita a localização. Usando São Paulo por enquanto.
+            Para precisão, permita a localização. Usando Lapa - SP por enquanto.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
             <Text style={styles.permissionButtonText}>Permitir</Text>
@@ -482,6 +529,8 @@ export const HomeScreen = () => {
             stations={displayedStations}
             onMarkerPress={handleMarkerPress}
             getMarkerColor={getMarkerColor}
+            initialCenter={{ lat: mapRegion.latitude, lng: mapRegion.longitude }}
+            initialZoom={13}
           />
         ) : (
           <MapComponent
@@ -494,6 +543,17 @@ export const HomeScreen = () => {
             onMarkerPress={handleMarkerPress}
             getMarkerColor={getMarkerColor}
           />
+        )}
+
+        {Platform.OS === 'web' && (
+          <View style={styles.webDebugOverlay} accessibilityLabel="Resumo de marcadores carregados">
+            <Text style={styles.webDebugTitle}>Marcadores carregados: {displayedStations.length}</Text>
+            {displayedStations.slice(0, 5).map((s) => (
+              <Text key={s.id} style={styles.webDebugItem}>
+                {s.id} — lat {Number(s.latitude).toFixed(6)}, lon {Number(s.longitude).toFixed(6)}
+              </Text>
+            ))}
+          </View>
         )}
 
         {/* GPS recenter button - moved to right and raised for visibility */}
@@ -828,6 +888,28 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  webDebugOverlay: {
+    position: 'absolute',
+    right: 12,
+    top: Platform.OS === 'web' ? 200 : 140,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.gray + '30',
+    maxWidth: 320,
+    zIndex: 25,
+  },
+  webDebugTitle: {
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  webDebugItem: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
   },
 });
 

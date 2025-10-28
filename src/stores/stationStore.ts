@@ -37,7 +37,7 @@ export const useStationStore = create<StationStore>((set, get) => ({
   filteredStations: [],
   favorites: [],
   searchQuery: '',
-  distanceFilter: DISTANCE_FILTERS[0],
+  distanceFilter: DISTANCE_FILTERS[1],
   favoritesOnly: false,
   freeParkingOnly: false,
   idleOnly: false,
@@ -102,12 +102,12 @@ export const useStationStore = create<StationStore>((set, get) => ({
       const favoritesOnly = !!saved.favoritesOnly;
       const freeParkingOnly = !!saved.freeParkingOnly;
       const idleOnly = !!saved.idleOnly;
-      const radiusNum = Number(radiusStr || DISTANCE_FILTERS[0]);
-      const radius: DistanceFilter = (DISTANCE_FILTERS as number[]).includes(radiusNum) ? (radiusNum as DistanceFilter) : DISTANCE_FILTERS[0];
+      const radiusNum = Number(radiusStr || DISTANCE_FILTERS[1]);
+      const radius: DistanceFilter = (DISTANCE_FILTERS as number[]).includes(radiusNum) ? (radiusNum as DistanceFilter) : DISTANCE_FILTERS[1];
       set({ favoritesOnly, freeParkingOnly, idleOnly, distanceFilter: radius });
       get().filterStations();
     } catch (e) {
-      set({ favoritesOnly: false, freeParkingOnly: false, idleOnly: false, distanceFilter: DISTANCE_FILTERS[0] });
+      set({ favoritesOnly: false, freeParkingOnly: false, idleOnly: false, distanceFilter: DISTANCE_FILTERS[1] });
     }
   },
 

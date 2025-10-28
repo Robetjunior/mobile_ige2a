@@ -12,9 +12,18 @@ const headers = {
 };
 
 export interface ChargerDto {
+  // Campos mínimos para /v1/chargers (nearby)
   chargeBoxId: string;
+  site?: string | null;
+  coords?: { lat: number; lon: number };
+  distanceKm?: number; // já calculado pelo backend, com 3 casas decimais
+  overallStatus?: 'Available' | 'Occupied' | 'Unknown' | string;
+  wsOnline?: boolean;
+  lastHeartbeatAt?: string | null;
+
+  // Campos adicionais que podem aparecer em outros endpoints
   name?: string;
-  status?: 'online' | 'offline' | 'busy';
+  status?: 'online' | 'offline' | 'busy' | string;
   lat?: number;
   lon?: number;
   address?: string;
@@ -149,27 +158,56 @@ export class ChargerService {
   static async fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 15000) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
+    const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
     try {
       const res = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
       return res;
+    } catch (err: any) {
+      // Dev-only fallback for CORS/network errors in web builds
+      const isAbort = (err && (err.name === 'AbortError' || /abort/i.test(String(err))))
+      if (isWeb && !isAbort && process.env.NODE_ENV !== 'production') {
+        try {
+          const proxied = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+          LOGGER.API.warn('Fetch falhou; tentando via CORS proxy (apenas dev)', { url });
+          const res = await fetch(proxied, { cache: 'no-store', ...options, signal: controller.signal });
+          return res;
+        } catch (err2) {
+          LOGGER.API.error('CORS proxy também falhou', { url, err: String(err2) });
+          throw err2;
+        }
+      }
+      throw err;
     } finally {
       clearTimeout(t);
     }
   }
 
   static mapDtoToStation(dto: ChargerDto): Station {
+    const normalizeStatus = (s?: string): Station['status'] => {
+      const v = (s || '').toString().trim().toLowerCase();
+      if (v === 'available') return 'available' as any;
+      if (v === 'occupied') return 'occupied' as any;
+      if (v === 'busy') return 'busy';
+      if (v === 'online') return 'online';
+      if (v === 'unknown') return 'unknown' as any;
+      if (v === 'offline') return 'offline';
+      return 'offline';
+    };
+
+    const latitude = (dto.coords?.lat as any) ?? (dto.lat as any);
+    const longitude = (dto.coords?.lon as any) ?? (dto.lon as any);
+
     return {
       id: dto.chargeBoxId,
-      name: dto.name || dto.chargeBoxId,
-      address: dto.address || 'Endereço indisponível',
-      latitude: dto.lat as any, // pode estar ausente; tratado pelos consumidores
-      longitude: dto.lon as any,
-      status: (dto.status || 'offline') as Station['status'],
+      name: (dto.site || dto.name || dto.chargeBoxId) as string,
+      address: dto.address || '',
+      latitude,
+      longitude,
+      status: normalizeStatus(dto.overallStatus || dto.status),
       connectors: [],
-      distance: undefined,
+      distance: typeof dto.distanceKm === 'number' ? dto.distanceKm : undefined,
       isFavorite: false,
-      // campos extras opcionais ficam fora por ora
-    };
+    } as Station;
   }
 
   static async getOnlineChargers(): Promise<Station[]> {
@@ -283,6 +321,55 @@ export class ChargerService {
       LOGGER.API.error('getChargers failed', err);
       throw err;
     }
+  }
+
+  // Novo: lista próxima com enriquecimento por detalhe
+  static async getNearbyChargersEnriched(
+    lat: number,
+    lon: number,
+    radiusKm: number,
+    limit?: number
+  ): Promise<Station[]> {
+    this.ensureConfig();
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      throw new Error('invalid_parameters: lat/lon inválidos');
+    }
+    const params = new URLSearchParams();
+    params.set('lat', String(lat));
+    params.set('lon', String(lon));
+    params.set('radiusKm', String(radiusKm));
+    if (typeof limit === 'number' && limit > 0) params.set('limit', String(limit));
+    const url = `${API_BASE}/v1/chargers?${params.toString()}`;
+    const isWeb = typeof window !== 'undefined' && typeof (window as any).document !== 'undefined';
+    const devHost = isWeb ? (window.location?.hostname || '') : '';
+    const candidates: string[] = [url];
+    if (isWeb && ['localhost', '127.0.0.1', '0.0.0.0'].includes(devHost)) {
+      candidates.push(`http://localhost:3000/v1/chargers?${params.toString()}`, `http://127.0.0.1:3000/v1/chargers?${params.toString()}`);
+    }
+
+    let list: ChargerDto[] = [];
+    for (const candidate of candidates) {
+      try {
+        LOGGER.API.info('GET /v1/chargers (nearby)', { url: candidate, radiusKm, limit });
+        const res = await this.fetchWithTimeout(candidate, ChargerService.buildGetOptions());
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status} ${text}`);
+        }
+        const raw = await res.json();
+        list = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
+        break;
+      } catch (e) {
+        LOGGER.API.warn('Nearby fetch candidate failed', { url: candidate, err: String(e) });
+        list = [];
+      }
+    }
+
+    if (!list.length) return [];
+    const baseStations = list.map((dto) => this.mapDtoToStation(dto));
+    // Ordena por distância crescente e limita conforme solicitado
+    const sorted = baseStations.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+    return typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
   }
 
   static async getChargerDetails(chargeBoxId: string): Promise<Station> {

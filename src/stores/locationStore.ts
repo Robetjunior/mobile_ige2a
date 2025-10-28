@@ -10,8 +10,9 @@ interface LocationStore extends LocationState {
 }
 
 export const useLocationStore = create<LocationStore>((set, get) => ({
-  latitude: -23.5505, // Default to São Paulo
-  longitude: -46.6333,
+  // Fallback padrão: Rua Domingos Rodrigues 547, Lapa - SP
+  latitude: -23.5231248,
+  longitude: -46.7073544,
   hasPermission: false,
   isLoading: false,
 

@@ -79,6 +79,13 @@ export const MAP_DEFAULTS = {
   LATITUDE_DELTA: 0.0922,
   LONGITUDE_DELTA: 0.0421,
   ZOOM_LEVEL: 15,
+  // Região padrão: Rua Domingos Rodrigues 547, Lapa - SP
+  region: {
+    latitude: -23.5231248,
+    longitude: -46.7073544,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  },
 };
 
 export const STORAGE_KEYS = {
