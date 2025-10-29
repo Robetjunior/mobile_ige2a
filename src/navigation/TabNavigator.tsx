@@ -176,11 +176,11 @@ const TabNavigator: React.FC = () => {
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" children={() => (<ErrorBoundary><HomeScreen /></ErrorBoundary>)} />
-      <Tab.Screen name="Charge" children={() => (<ErrorBoundary><ChargeScreen /></ErrorBoundary>)} />
+      <Tab.Screen name="Home" options={{ tabBarLabel: 'Início' }} children={() => (<ErrorBoundary><HomeScreen /></ErrorBoundary>)} />
+      <Tab.Screen name="Charge" options={{ tabBarLabel: 'Carregar' }} children={() => (<ErrorBoundary><ChargeScreen /></ErrorBoundary>)} />
       <Tab.Screen name="QRScanner" component={QRScannerScreen} />
-      <Tab.Screen name="Record" children={() => (<ErrorBoundary><RecordScreen /></ErrorBoundary>)} />
-      <Tab.Screen name="Me" children={() => (<ErrorBoundary><ProfileMeScreen /></ErrorBoundary>)} />
+      <Tab.Screen name="Record" options={{ tabBarLabel: 'Registro' }} children={() => (<ErrorBoundary><RecordScreen /></ErrorBoundary>)} />
+      <Tab.Screen name="Me" options={{ tabBarLabel: 'Eu' }} children={() => (<ErrorBoundary><ProfileMeScreen /></ErrorBoundary>)} />
     </Tab.Navigator>
   );
 };

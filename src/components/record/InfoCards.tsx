@@ -54,7 +54,7 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
 
   const cards: CardData[] = [
     {
-      title: 'Total Money',
+      title: 'Total gasto',
       value: isLoading ? '---' : formatCurrency(totalMoney),
       icon: 'reader-outline',
       color: '#F39C12',
@@ -63,7 +63,7 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
         : `Total de dinheiro, ${formatCurrencyForAccessibility(totalMoney)}`,
     },
     {
-      title: 'Charging capacity',
+      title: 'Energia carregada',
       value: isLoading ? '---' : formatEnergy(totalKWh),
       icon: 'flash-outline',
       color: '#17C0A4',
@@ -72,7 +72,7 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
         : `Capacidade de carregamento, ${totalKWh.toFixed(1)} quilowatt-hora`,
     },
     {
-      title: 'Charging duration',
+      title: 'Tempo de carregamento',
       value: isLoading ? '---' : formatDuration(totalMinutes),
       icon: 'time-outline',
       color: '#FFC107',
@@ -99,7 +99,7 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Information</Text>
+      <Text style={styles.sectionTitle}>Informações</Text>
       <View style={styles.listContainer}>
         {cards.map((card, idx) => (
           <ListItem key={idx} card={card} last={idx === cards.length - 1} />
@@ -111,19 +111,18 @@ export const InfoCards: React.FC<InfoCardsProps> = ({
 
 const styles = StyleSheet.create({
   section: {
-    marginHorizontal: 16,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#212529',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   listContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

@@ -76,8 +76,8 @@ export default function RecordScreen() {
 
   // Header
   const Header = (
-    <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-      <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF' }}>Registros</Text>
+    <View style={{ paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>Registro</Text>
     </View>
   );
 
