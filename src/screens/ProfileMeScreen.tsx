@@ -195,11 +195,11 @@ const ProfileMeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   headerBand: {
-    height: 200,
+    minHeight: 200,
     backgroundColor: '#474A51',
     paddingTop: 16,
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingBottom: 36,
     alignItems: 'stretch',
   },
   headerAccountTitle: {
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     color: '#DADDE2',
     fontSize: 13,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 18,
   },
   shortcutGridCard: {
     backgroundColor: '#fff',
