@@ -10,8 +10,7 @@
     "dev": "expo start --web --port 8084",
     "clean:metro": "expo start -c",
     "start:web": "expo start --web --port 8084",
-    "test:record": "echo \"Test placeholder: visit /record and verify charts\"",
-    "test": "node -r ts-node/register scripts/test-record.ts"
+    "proxy": "node proxy/server.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
