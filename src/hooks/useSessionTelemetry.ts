@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { api } from '../services/api';
 import type { ActiveSessionResponse, SessionTelemetryProgress, SessionTelemetryState } from '../types';
+import { fetchChargeDetail } from '../services/chargeProxy';
 
 interface UseSessionTelemetryOptions {
   chargeBoxId: string | null;
@@ -10,8 +10,8 @@ interface UseSessionTelemetryOptions {
 
 export function useSessionTelemetry({
   chargeBoxId,
-  pollingInterval = 3000,
-  enabled = true
+  pollingInterval = 5000,
+  enabled = true,
 }: UseSessionTelemetryOptions) {
   const [state, setState] = useState<SessionTelemetryState>({
     activeSession: null,
@@ -23,33 +23,9 @@ export function useSessionTelemetry({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
 
-  // Fetch active session for the chargeBoxId
-  const fetchActiveSession = useCallback(async (cbId: string): Promise<ActiveSessionResponse | null> => {
-    try {
-      const response = await api.get(`/v1/sessions/active/${cbId}`);
-      return response.data || null;
-    } catch (error: any) {
-      // If no active session, API might return 404 - this is normal
-      if (error?.response?.status === 404) {
-        return null;
-      }
-      throw error;
-    }
-  }, []);
-
-  // Fetch telemetry progress for a transaction
-  const fetchProgress = useCallback(async (transactionId: string): Promise<SessionTelemetryProgress | null> => {
-    try {
-      const response = await api.get(`/v1/sessions/${transactionId}/progress`);
-      return response.data || null;
-    } catch (error: any) {
-      // If session not found, API might return 404
-      if (error?.response?.status === 404) {
-        return null;
-      }
-      throw error;
-    }
-  }, []);
+  // Backoff state for 5xx errors
+  const retryRef = useRef(0);
+  const baseIntervalRef = useRef(pollingInterval);
 
   // Main polling function
   const poll = useCallback(async () => {
@@ -57,46 +33,59 @@ export function useSessionTelemetry({
 
     try {
       setState(prev => ({ ...prev, error: null }));
-
-      // Step 1: Get active session
-      const activeSession = await fetchActiveSession(chargeBoxId);
-      
+      const { activeSession, progress } = await fetchChargeDetail(chargeBoxId);
       if (!mountedRef.current) return;
 
-      if (!activeSession) {
-        // No active session
+      if (!activeSession || !progress) {
+        // No active session: stop polling until enabled again
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
         setState(prev => ({
           ...prev,
           activeSession: null,
           progress: null,
-          isPolling: false
+          isPolling: false,
         }));
+        retryRef.current = 0; // reset backoff
         return;
       }
-
-      // Step 2: Get progress for the active session
-      const progress = await fetchProgress(activeSession.transactionId);
-      
-      if (!mountedRef.current) return;
 
       setState(prev => ({
         ...prev,
         activeSession,
         progress,
-        isPolling: true
+        isPolling: true,
       }));
+      // Success: reset backoff and interval if needed
+      if (retryRef.current !== 0 && baseIntervalRef.current) {
+        retryRef.current = 0;
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+        intervalRef.current = setInterval(poll, baseIntervalRef.current);
+      }
 
     } catch (error: any) {
       if (!mountedRef.current) return;
       
       console.error('Session telemetry polling error:', error);
-      setState(prev => ({
-        ...prev,
-        error: error?.message || 'Failed to fetch session telemetry',
-        isPolling: false
-      }));
+      const msg = error?.message || 'Falha ao buscar telemetria da sessão';
+      setState(prev => ({ ...prev, error: msg }));
+
+      // Exponential backoff on 5xx by increasing interval: 5s -> 10s -> 20s
+      const isServerError = /\b(5\d\d)\b/.test(msg) || /Backend error/.test(msg);
+      if (isServerError) {
+        retryRef.current = Math.min(2, retryRef.current + 1);
+        const nextInterval = [baseIntervalRef.current, baseIntervalRef.current * 2, baseIntervalRef.current * 4][retryRef.current];
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+        intervalRef.current = setInterval(poll, nextInterval);
+      }
     }
-  }, [chargeBoxId, enabled, fetchActiveSession, fetchProgress]);
+  }, [chargeBoxId, enabled]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -111,7 +100,8 @@ export function useSessionTelemetry({
     poll();
 
     // Set up interval
-    intervalRef.current = setInterval(poll, pollingInterval);
+    baseIntervalRef.current = pollingInterval;
+    intervalRef.current = setInterval(poll, baseIntervalRef.current);
     
     setState(prev => ({ ...prev, isPolling: true }));
   }, [chargeBoxId, enabled, poll, pollingInterval]);

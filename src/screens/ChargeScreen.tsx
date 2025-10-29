@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, TextInput, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import ChargerService from '../services/chargerService';
@@ -45,8 +45,8 @@ const cs = useChargerState(chargeBoxId || '');
   // Real-time telemetry polling
   const telemetry = useSessionTelemetry({
     chargeBoxId,
-    pollingInterval: 3000, // 3 seconds
-    enabled: Boolean(chargeBoxId)
+    pollingInterval: 5000, // 5 seconds per acceptance
+    enabled: Boolean(chargeBoxId),
   });
 
   useEffect(() => {
@@ -74,6 +74,13 @@ const cs = useChargerState(chargeBoxId || '');
     if (!chargeBoxId) return;
     fetchData(chargeBoxId);
   }, [chargeBoxId]);
+
+  // Show error feedback when telemetry fails
+  useEffect(() => {
+    if (telemetry.error) {
+      pushToast('error', telemetry.error);
+    }
+  }, [telemetry.error]);
 
   const fetchData = async (id: string) => {
     setLoading(true);
@@ -186,6 +193,21 @@ const cs = useChargerState(chargeBoxId || '');
     }
   }, [cs.ui.headerLabel]);
 
+  // Imagem central do gauge: via query param (?centerImg=URL) ou env
+  const centerImageSrc = useMemo(() => {
+    if (Platform.OS === 'web') {
+      try {
+        const usp = new URLSearchParams((globalThis as any)?.window?.location?.search || '');
+        const q = usp.get('centerImg');
+        if (q && q.startsWith('http')) return { uri: q } as any;
+      } catch {}
+    }
+    const envUrl = (process.env.EXPO_PUBLIC_CHARGE_CENTER_IMAGE || '').trim();
+    if (envUrl && envUrl.startsWith('http')) return { uri: envUrl } as any;
+    // fallback para ícone padrão do app
+    try { return require('../../assets/icon.png'); } catch { return undefined as any; }
+  }, []);
+
   function pushToast(type: 'info'|'warn'|'error'|'success', message: string) {
     const id = toastSeq.current++;
     setToasts((prev) => [...prev, { id, type, message }]);
@@ -291,7 +313,11 @@ const cs = useChargerState(chargeBoxId || '');
       </View>
 
       <View style={styles.headerCard}>
-        <CircularGauge percent={typeof cs.progressPct === 'number' ? cs.progressPct : null} size={160} />
+        <CircularGauge 
+          percent={typeof cs.progressPct === 'number' ? cs.progressPct : null} 
+          size={160}
+          centerImageSrc={centerImageSrc}
+        />
       </View>
 
       <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
@@ -347,13 +373,7 @@ const cs = useChargerState(chargeBoxId || '');
           { label: 'Temperatura', value: fmt(cs.metrics.temperatureC, '°C'), icon: 'thermometer-outline' as const },
           { label: 'Início', value: cs.metrics.startTime ? new Date(cs.metrics.startTime).toLocaleTimeString() : '', icon: 'time-outline' as const },
         ].map((m, idx) => (
-          <View key={idx} style={styles.kpiCardSm}>
-            <View style={styles.kpiHeader}>
-              <Ionicons name={m.icon} size={14} color="#6C757D" />
-              <Text style={styles.kpiLabel}>{m.label}</Text>
-            </View>
-            <Text style={styles.kpiValueSm}>{m.value}</Text>
-          </View>
+          <KpiItem key={idx} label={m.label} value={m.value} icon={m.icon} />
         ))}
       </View>
 
@@ -437,6 +457,25 @@ function getStatusFg(status?: string) {
   }
 }
 
+// Item de KPI com animação de fade-in discreta ao atualizar o valor
+function KpiItem({ label, value, icon }: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>['name'] }) {
+  const fade = React.useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    fade.setValue(0);
+    Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, [value]);
+
+  return (
+    <Animated.View style={[styles.kpiCardSm, { opacity: fade }]}> 
+      <View style={styles.kpiHeader}>
+        <Ionicons name={icon} size={14} color="#00B3A4" />
+        <Text style={styles.kpiLabel}>{label}</Text>
+      </View>
+      <Text style={styles.kpiValueSm}>{value}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
   content: { padding: SIZES.padding },
@@ -462,14 +501,14 @@ const styles = StyleSheet.create({
   priceSubtext: { marginTop: 8, color: '#6B7280' },
 
   // KPIs
-  kpiGridRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  kpiCardLg: { flex: 1, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  kpiHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  kpiLabel: { color: '#6B7280', fontSize: 12 },
-  kpiValueLg: { marginTop: 4, fontSize: 18, fontWeight: '700', color: COLORS.black },
-  kpiGridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  kpiCardSm: { width: '48%', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  kpiValueSm: { marginTop: 2, fontSize: 16, fontWeight: '700', color: COLORS.black },
+  kpiGridRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  kpiCardLg: { flex: 1, backgroundColor: '#F4F5F7', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  kpiHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  kpiLabel: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
+  kpiValueLg: { marginTop: 6, fontSize: 18, fontWeight: '600', color: '#1E293B', textAlign: 'center' },
+  kpiGridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 10 },
+  kpiCardSm: { width: '48%', backgroundColor: '#F4F5F7', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2, alignItems: 'center' },
+  kpiValueSm: { marginTop: 6, fontSize: 18, fontWeight: '600', color: '#1E293B', textAlign: 'center' },
 
   panelContainer: { marginTop: 8, backgroundColor: '#F3F4F6', borderRadius: 12 },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12 },
