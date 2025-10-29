@@ -47,6 +47,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Modal, TextInput, Switch } from 'react-native';
 import { HomeMenuSheet } from '../components/HomeMenuSheet';
 import { useHomeMenuStore } from '../stores/homeMenuStore';
+import type { Connector } from '../types';
 
 type RootStackParamList = {
   StationDetail: { stationId: string };
@@ -104,6 +105,88 @@ export const HomeScreen = () => {
   const [page, setPage] = useState(1);
   const pageSize = 20;
   // (Search e filtros rápidos removidos)
+
+  // Debug (web): mock de marcadores próximos ao usuário para demonstrar clustering
+  const [debugMockActive, setDebugMockActive] = useState(false);
+  const [mockStations, setMockStations] = useState<Station[]>([]);
+
+  const generateMockStations = (latBase: number, lonBase: number) => {
+    const mkId = (i: number) => `MOCK-${i.toString().padStart(3, '0')}`;
+    const statuses: Station['status'][] = ['online', 'offline', 'busy'];
+    const connStatus: Connector['status'][] = ['available', 'occupied', 'offline'];
+    const items: Station[] = [];
+    // Cluster 1: muito próximo (±40m)
+    for (let i = 0; i < 6; i++) {
+      const dLat = (Math.sin((i / 6) * 2 * Math.PI) * 0.00036); // ~40m
+      const dLon = (Math.cos((i / 6) * 2 * Math.PI) * 0.00036);
+      items.push({
+        id: mkId(i + 1),
+        name: `Mock CP ${i + 1}`,
+        address: 'Perto de você',
+        latitude: latBase + dLat,
+        longitude: lonBase + dLon,
+        status: statuses[i % statuses.length],
+        connectors: [
+          { id: '1', type: 'CCS2', powerKw: 50, status: connStatus[i % connStatus.length] },
+        ],
+        distance: Math.round(Math.random() * 100) / 10,
+      });
+    }
+    // Dois pinos exatamente no mesmo ponto (sobreposição real)
+    items.push({
+      id: mkId(101),
+      name: 'Mock Same A',
+      address: 'Mesmo local',
+      latitude: latBase,
+      longitude: lonBase,
+      status: 'online',
+      connectors: [{ id: '1', type: 'CCS2', powerKw: 60, status: 'available' }],
+    });
+    items.push({
+      id: mkId(102),
+      name: 'Mock Same B',
+      address: 'Mesmo local',
+      latitude: latBase,
+      longitude: lonBase,
+      status: 'busy',
+      connectors: [{ id: '2', type: 'Type 2', powerKw: 22, status: 'occupied' }],
+    });
+    // Cluster 2: ~180m a sudoeste
+    for (let j = 0; j < 4; j++) {
+      const baseLat = latBase - 0.00162; // ~180m
+      const baseLon = lonBase - 0.00162;
+      const dLat = (Math.sin((j / 4) * 2 * Math.PI) * 0.00022);
+      const dLon = (Math.cos((j / 4) * 2 * Math.PI) * 0.00022);
+      items.push({
+        id: mkId(200 + j),
+        name: `Mock Cluster2 ${j + 1}`,
+        address: 'Restaurante X',
+        latitude: baseLat + dLat,
+        longitude: baseLon + dLon,
+        status: statuses[(j + 1) % statuses.length],
+        connectors: [{ id: '1', type: 'CCS2', powerKw: 30, status: connStatus[(j + 1) % connStatus.length] }],
+      });
+    }
+    return items;
+  };
+
+  // Ativa modo mock por querystring ?mock=1 (web)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const enabled = params.get('mock') === '1';
+      setDebugMockActive(enabled);
+    } catch {}
+  }, []);
+
+  // Regenera quando mudar região ou alternar mock
+  useEffect(() => {
+    if (!debugMockActive) return;
+    const lat = mapRegion.latitude ?? -23.5231248;
+    const lon = mapRegion.longitude ?? -46.7073544;
+    setMockStations(generateMockStations(lat, lon));
+  }, [debugMockActive, mapRegion.latitude, mapRegion.longitude]);
 
   // Favoritos locais por chargeBoxId
   const [favIds, setFavIds] = useState<string[]>([]);
@@ -450,7 +533,7 @@ export const HomeScreen = () => {
     }
   };
 
-  const displayedStations = filteredStations;
+  const displayedStations = Platform.OS === 'web' && debugMockActive ? mockStations : filteredStations;
 
   // Lista online ordenada com filtros (favoritesOnly/idleOnly)
   const sortedOnline = onlineStations
@@ -545,16 +628,6 @@ export const HomeScreen = () => {
           />
         )}
 
-        {Platform.OS === 'web' && (
-          <View style={styles.webDebugOverlay} accessibilityLabel="Resumo de marcadores carregados">
-            <Text style={styles.webDebugTitle}>Marcadores carregados: {displayedStations.length}</Text>
-            {displayedStations.slice(0, 5).map((s) => (
-              <Text key={s.id} style={styles.webDebugItem}>
-                {s.id} — lat {Number(s.latitude).toFixed(6)}, lon {Number(s.longitude).toFixed(6)}
-              </Text>
-            ))}
-          </View>
-        )}
 
         {/* GPS recenter button - moved to right and raised for visibility */}
         <TouchableOpacity

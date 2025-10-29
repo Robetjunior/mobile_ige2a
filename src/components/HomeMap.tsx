@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
-import { useJsApiLoader, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
+import { useJsApiLoader, GoogleMap, Marker, InfoWindow, MarkerClustererF } from '@react-google-maps/api';
 import { Station } from '../types';
 import { COLORS } from '../constants';
 
@@ -52,13 +52,86 @@ export const HomeMap: React.FC<HomeMapProps> = ({
     return fromStore;
   }, [stations]);
 
+  // Ajusta marcadores com mesma coordenada para evitar sobreposição total
+  const offsetMarkers = useMemo(() => {
+    const groups = new Map<string, typeof markers>();
+    const keyOf = (p: { lat: number; lng: number }) => `${p.lat.toFixed(6)}:${p.lng.toFixed(6)}`;
+    for (const m of markers) {
+      const k = keyOf(m.position);
+      const arr = groups.get(k) || [];
+      arr.push(m);
+      groups.set(k, arr);
+    }
+
+    const adjusted: typeof markers = [];
+    const baseDelta = 0.00025; // ~27m aprox.
+    groups.forEach((arr) => {
+      if (arr.length === 1) {
+        adjusted.push(arr[0]);
+        return;
+      }
+      // Distribui em círculo ao redor da posição original
+      const center = arr[0].position;
+      const n = arr.length;
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n;
+        const dy = Math.sin(angle) * baseDelta;
+        const dx = Math.cos(angle) * baseDelta;
+        adjusted.push({
+          ...arr[i],
+          position: { lat: center.lat + dy, lng: center.lng + dx },
+        });
+      }
+    });
+
+    return adjusted;
+  }, [markers]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Gera marcador SVG com cor definida, evitando pixelização em zoom.
+  const buildSvgMarker = (hex: string) => {
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+  <g fill="none">
+    <path d="M18 2c8 0 14 6 14 14 0 9-12 17-14 18-2-1-14-9-14-18 0-8 6-14 14-14z" fill="${hex}" stroke="#1F2937" stroke-width="1"/>
+    <circle cx="18" cy="16" r="5" fill="#FFFFFF"/>
+  </g>
+ </svg>`;
+    const url = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    const g = (window as any)?.google?.maps;
+    if (g) {
+      const size = new g.Size(36, 36);
+      return {
+        url,
+        scaledSize: size,
+        anchor: new g.Point(18, 36),
+      } as google.maps.Icon;
+    }
+    return url;
+  };
+
   const statusToIcon = useCallback((status: string) => {
-    const color = getMarkerColor ? getMarkerColor(status) : undefined;
-    if (color === COLORS.success || status === 'online') return 'http://maps.google.com/mapfiles/ms/icons/green-dot.png';
-    if (color === COLORS.warning || status === 'busy') return 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png';
-    return 'http://maps.google.com/mapfiles/ms/icons/grey-dot.png';
+    const custom = getMarkerColor ? getMarkerColor(status) : undefined;
+    const hex = custom
+      || (status === 'online' ? COLORS.online : status === 'busy' ? COLORS.busy : COLORS.offline);
+
+    const g = (window as any)?.google?.maps;
+    if (g) {
+      const symbol: google.maps.Symbol = {
+        path: g.SymbolPath.CIRCLE,
+        scale: 9,
+        fillColor: hex,
+        fillOpacity: 1,
+        strokeColor: '#1F2937',
+        strokeOpacity: 0.9,
+        strokeWeight: 1.2,
+        anchor: new g.Point(0, 0),
+      };
+      return symbol;
+    }
+
+    return buildSvgMarker(hex);
   }, [getMarkerColor]);
 
   if (loadError) {
@@ -93,17 +166,25 @@ export const HomeMap: React.FC<HomeMapProps> = ({
           backgroundColor: '#FFFFFF',
         }}
       >
-        {markers.map((m) => (
-          <Marker
-            key={m.id}
-            position={m.position}
-            onClick={() => setSelectedId(m.id)}
-            icon={statusToIcon(m.status)}
-            title={m.name}
-          />
-        ))}
+        <MarkerClustererF options={{ gridSize: 60, minimumClusterSize: 2 }}>
+          {(clusterer) => (
+            <>
+              {offsetMarkers.map((m) => (
+                <Marker
+                  key={m.id}
+                  position={m.position}
+                  onClick={() => setSelectedId(m.id)}
+                  icon={statusToIcon(m.status)}
+                  options={{ optimized: false }}
+                  title={m.name}
+                  clusterer={clusterer}
+                />
+              ))}
+            </>
+          )}
+        </MarkerClustererF>
 
-        {markers.map((m) => (
+        {offsetMarkers.map((m) => (
           selectedId === m.id ? (
             <InfoWindow key={`info-${m.id}`} position={m.position} onCloseClick={() => setSelectedId(null)}>
               <div style={{ maxWidth: 220 }}>
