@@ -11,16 +11,8 @@ interface RealTimeMetricsProps {
 
 export default function RealTimeMetrics({ progress, isPolling }: RealTimeMetricsProps) {
   if (!progress) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.noDataContainer}>
-          <Ionicons name="analytics-outline" size={32} color={COLORS.gray} />
-          <Text style={styles.noDataText}>
-            {isPolling ? 'Aguardando dados de telemetria...' : 'Nenhuma sessão ativa'}
-          </Text>
-        </View>
-      </View>
-    );
+    // Sem telemetria: não renderiza o placeholder para remover 'Nenhuma sessão ativa'
+    return null;
   }
 
   const formatDuration = (seconds: number): string => {
